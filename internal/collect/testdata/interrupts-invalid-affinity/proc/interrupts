@@ -1,0 +1,2 @@
+           CPU0       CPU1
+ 32:         10         20   IR-PCI-MSI 524288-edge eth0-TxRx-0

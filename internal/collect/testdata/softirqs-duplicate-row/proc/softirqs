@@ -1,0 +1,4 @@
+                    CPU0       CPU1
+      NET_TX:          4          6
+      NET_RX:         10         30
+      NET_RX:         11         31

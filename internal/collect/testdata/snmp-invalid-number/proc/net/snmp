@@ -1,0 +1,2 @@
+Tcp: InSegs OutSegs RetransSegs InErrs
+Tcp: 101 202 invalid 3

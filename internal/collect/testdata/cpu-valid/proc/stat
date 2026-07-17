@@ -1,0 +1,7 @@
+cpu  21 1 41 201 2 4 10 5 0 0
+cpu0 10 1 20 100 2 3 4 5 0 0
+cpu1 11 0 21 101 0 1 6 0 0 0
+intr 0
+ctxt 0
+procs_running 3
+procs_blocked 0

@@ -1,0 +1,405 @@
+package analysis
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/eray/netdiag/internal/model"
+)
+
+func TestAnalyzeRetransmissions(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second), TCP: model.TCPStats{OutSegments: 1000, Retransmits: 10}, EBPF: &model.EBPFStats{TCPRetransmitEvents: 5}},
+		{Timestamp: now.Add(time.Second), ElapsedNanos: int64(2 * time.Second), TCP: model.TCPStats{OutSegments: 2000, Retransmits: 40}, EBPF: &model.EBPFStats{TCPRetransmitEvents: 35}},
+	}}
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(findings[0].Summary, "retransmissions") {
+		t.Fatalf("unexpected finding: %+v", findings[0])
+	}
+	if findings[0].Confidence != "strong correlation" {
+		t.Fatalf("unexpected confidence: %s", findings[0].Confidence)
+	}
+	if got := strings.Join(findings[0].Evidence, " "); !strings.Contains(got, "eBPF observed 30") {
+		t.Fatalf("missing eBPF evidence: %s", got)
+	}
+}
+
+func TestAnalyzeRejectsShortRecording(t *testing.T) {
+	_, err := Analyze(model.Recording{Version: model.FormatVersion, Samples: []model.Sample{{}}})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+}
+
+func TestAnalyzeReportsCounterResets(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{
+			Timestamp:    now,
+			ElapsedNanos: int64(time.Second),
+			TCP:          model.TCPStats{InSegments: 100, OutSegments: 100, Retransmits: 10, InErrors: 2},
+			SoftIRQ:      model.SoftIRQStats{NetRX: 100, NetTX: 100},
+			Interface:    &model.InterfaceStats{RXPackets: 100, TXPackets: 100},
+			EBPF:         &model.EBPFStats{TCPRetransmitEvents: 10},
+		},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			TCP:          model.TCPStats{InSegments: 1, OutSegments: 1, Retransmits: 1, InErrors: 0},
+			SoftIRQ:      model.SoftIRQStats{NetRX: 1, NetTX: 1},
+			Interface:    &model.InterfaceStats{RXPackets: 1, TXPackets: 1},
+			EBPF:         &model.EBPFStats{TCPRetransmitEvents: 1},
+		},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(findings[0].Summary, "counters reset") {
+		t.Fatalf("unexpected finding: %+v", findings[0])
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	if !strings.Contains(evidence, "elapsed 1s") || !strings.Contains(evidence, "elapsed 2s") {
+		t.Errorf("reset evidence does not use elapsed time: %s", evidence)
+	}
+	for _, group := range []string{"TCP", "softirq", "interface", "eBPF"} {
+		if !strings.Contains(evidence, group) {
+			t.Errorf("missing %s reset evidence: %s", group, evidence)
+		}
+	}
+}
+
+func TestAnalyzeDetectsResetBetweenIntermediateSamples(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second), TCP: model.TCPStats{OutSegments: 100}},
+		{Timestamp: now.Add(time.Second), ElapsedNanos: int64(2 * time.Second), TCP: model.TCPStats{OutSegments: 10}},
+		{Timestamp: now.Add(2 * time.Second), ElapsedNanos: int64(3 * time.Second), TCP: model.TCPStats{OutSegments: 200}},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(findings[0].Summary, "counters reset") {
+		t.Fatalf("intermediate reset was not reported: %+v", findings)
+	}
+}
+
+func TestAnalyzeReportsPerCPUSoftIRQReset(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{
+			Timestamp:    now,
+			ElapsedNanos: int64(time.Second),
+			SoftIRQ: model.SoftIRQStats{
+				NetRX: 30,
+				NetTX: 30,
+				CPUs: []model.SoftIRQCPUStats{
+					{CPU: 0, NetRX: 10, NetTX: 10},
+					{CPU: 1, NetRX: 20, NetTX: 20},
+				},
+			},
+		},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			SoftIRQ: model.SoftIRQStats{
+				NetRX: 17,
+				NetTX: 17,
+				CPUs: []model.SoftIRQCPUStats{
+					{CPU: 0, NetRX: 11, NetTX: 11},
+					{CPU: 1, NetRX: 6, NetTX: 6},
+				},
+			},
+		},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	if !strings.Contains(evidence, "softirq CPU1 counter decreased") {
+		t.Fatalf("missing per-CPU softirq reset evidence: %s", evidence)
+	}
+}
+
+func TestAnalyzeDoesNotTreatSoftIRQCPUSetChangeAsReset(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{
+			Timestamp:    now,
+			ElapsedNanos: int64(time.Second),
+			SoftIRQ: model.SoftIRQStats{
+				NetRX: 300,
+				NetTX: 300,
+				CPUs: []model.SoftIRQCPUStats{
+					{CPU: 0, NetRX: 100, NetTX: 100},
+					{CPU: 1, NetRX: 200, NetTX: 200},
+				},
+			},
+		},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			SoftIRQ: model.SoftIRQStats{
+				NetRX: 60,
+				NetTX: 60,
+				CPUs: []model.SoftIRQCPUStats{
+					{CPU: 0, NetRX: 50, NetTX: 50},
+					{CPU: 2, NetRX: 10, NetTX: 10},
+				},
+			},
+		},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	if strings.Contains(evidence, "softirq") || strings.Contains(findings[0].Summary, "counters reset") {
+		t.Fatalf("CPU set change was treated as a reset: %+v", findings)
+	}
+}
+
+func TestAnalyzeReportsReceiveCPUConcentration(t *testing.T) {
+	r := concentrationRecording(
+		[]model.SoftIRQCPUStats{
+			{CPU: 0, NetRX: 1000},
+			{CPU: 1, NetRX: 1000},
+			{CPU: 2, NetRX: 1000},
+		},
+		[]model.SoftIRQCPUStats{
+			{CPU: 0, NetRX: 1050},
+			{CPU: 1, NetRX: 1050},
+			{CPU: 2, NetRX: 2900},
+		},
+		[]model.CPUTimeStats{
+			cpuTime(0, 100, 900),
+			cpuTime(1, 100, 900),
+			cpuTime(2, 100, 900),
+		},
+		[]model.CPUTimeStats{
+			cpuTime(0, 300, 1700),
+			cpuTime(1, 300, 1700),
+			cpuTime(2, 900, 1100),
+		},
+	)
+	r.Samples[0].IRQ = model.IRQStats{IRQs: []model.IRQLineStats{
+		{IRQ: "32", CPUs: []int{0, 1, 2}, Counts: []uint64{10, 20, 30}},
+	}}
+	r.Samples[1].IRQ = model.IRQStats{IRQs: []model.IRQLineStats{
+		{IRQ: "32", CPUs: []int{0, 1, 2}, Counts: []uint64{10, 20, 130}},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *Finding
+	for i := range findings {
+		if findings[i].Summary == "Network receive processing was concentrated on a busy CPU" {
+			found = &findings[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("missing receive CPU concentration finding: %+v", findings)
+	}
+	evidence := strings.Join(found.Evidence, " ")
+	for _, want := range []string{"CPU2 handled 95.0%", "CPU2 was 80.0%", "IRQ counts also increased on CPU2 by 100"} {
+		if !strings.Contains(evidence, want) {
+			t.Fatalf("missing evidence %q in %q", want, evidence)
+		}
+	}
+}
+
+func TestAnalyzeDoesNotReportReceiveCPUConcentrationBelowSoftIRQThreshold(t *testing.T) {
+	r := concentrationRecording(
+		[]model.SoftIRQCPUStats{{CPU: 0, NetRX: 1000}, {CPU: 1, NetRX: 1000}},
+		[]model.SoftIRQCPUStats{{CPU: 0, NetRX: 1010}, {CPU: 1, NetRX: 1900}},
+		[]model.CPUTimeStats{cpuTime(0, 100, 900), cpuTime(1, 100, 900)},
+		[]model.CPUTimeStats{cpuTime(0, 300, 1700), cpuTime(1, 900, 1100)},
+	)
+
+	assertNoReceiveCPUConcentration(t, r)
+}
+
+func TestAnalyzeDoesNotReportReceiveCPUConcentrationWhenCPUIsMostlyIdle(t *testing.T) {
+	r := concentrationRecording(
+		[]model.SoftIRQCPUStats{{CPU: 0, NetRX: 1000}, {CPU: 1, NetRX: 1000}},
+		[]model.SoftIRQCPUStats{{CPU: 0, NetRX: 1100}, {CPU: 1, NetRX: 2900}},
+		[]model.CPUTimeStats{cpuTime(0, 100, 900), cpuTime(1, 100, 900)},
+		[]model.CPUTimeStats{cpuTime(0, 300, 1700), cpuTime(1, 300, 1700)},
+	)
+
+	assertNoReceiveCPUConcentration(t, r)
+}
+
+func TestAnalyzeDoesNotReportReceiveCPUConcentrationWhenCPUSetChanged(t *testing.T) {
+	r := concentrationRecording(
+		[]model.SoftIRQCPUStats{{CPU: 0, NetRX: 1000}, {CPU: 1, NetRX: 1000}},
+		[]model.SoftIRQCPUStats{{CPU: 0, NetRX: 1100}, {CPU: 1, NetRX: 2900}},
+		[]model.CPUTimeStats{cpuTime(0, 100, 900), cpuTime(1, 100, 900)},
+		[]model.CPUTimeStats{cpuTime(0, 300, 1700), cpuTime(2, 900, 1100)},
+	)
+
+	assertNoReceiveCPUConcentration(t, r)
+}
+
+func TestAnalyzeDoesNotReportReceiveCPUConcentrationWhenSoftIRQSetChanged(t *testing.T) {
+	r := concentrationRecording(
+		[]model.SoftIRQCPUStats{{CPU: 0, NetRX: 1000}, {CPU: 1, NetRX: 1000}},
+		[]model.SoftIRQCPUStats{{CPU: 0, NetRX: 1100}, {CPU: 2, NetRX: 2900}},
+		[]model.CPUTimeStats{cpuTime(0, 100, 900), cpuTime(1, 100, 900), cpuTime(2, 100, 900)},
+		[]model.CPUTimeStats{cpuTime(0, 300, 1700), cpuTime(1, 300, 1700), cpuTime(2, 900, 1100)},
+	)
+
+	assertNoReceiveCPUConcentration(t, r)
+}
+
+func TestAnalyzeDoesNotReportReceiveCPUConcentrationWhenSoftIRQResetDetected(t *testing.T) {
+	r := concentrationRecording(
+		[]model.SoftIRQCPUStats{{CPU: 0, NetRX: 1000}, {CPU: 1, NetRX: 3000}},
+		[]model.SoftIRQCPUStats{{CPU: 0, NetRX: 1100}, {CPU: 1, NetRX: 2900}},
+		[]model.CPUTimeStats{cpuTime(0, 100, 900), cpuTime(1, 100, 900)},
+		[]model.CPUTimeStats{cpuTime(0, 300, 1700), cpuTime(1, 900, 1100)},
+	)
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	if !strings.Contains(findings[0].Summary, "counters reset") || !strings.Contains(evidence, "softirq CPU1") {
+		t.Fatalf("expected softirq reset finding: %+v", findings)
+	}
+	for _, finding := range findings {
+		if finding.Summary == "Network receive processing was concentrated on a busy CPU" {
+			t.Fatalf("unexpected receive CPU concentration finding with softirq reset: %+v", findings)
+		}
+	}
+}
+
+func TestAnalyzeUsesElapsedTimeWhenWallClockMovesBackward(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second)},
+		{Timestamp: now.Add(-time.Hour), ElapsedNanos: int64(2 * time.Second)},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if evidence := strings.Join(findings[0].Evidence, " "); !strings.Contains(evidence, "across 1.0 seconds") {
+		t.Fatalf("duration did not use elapsed time: %s", evidence)
+	}
+}
+
+func concentrationRecording(firstSoftIRQ, lastSoftIRQ []model.SoftIRQCPUStats, firstCPU, lastCPU []model.CPUTimeStats) model.Recording {
+	now := time.Now()
+	return model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{
+			Timestamp:    now,
+			ElapsedNanos: int64(time.Second),
+			SoftIRQ: model.SoftIRQStats{
+				CPUs: firstSoftIRQ,
+			},
+			CPU: model.CPUStats{
+				CPUs: firstCPU,
+			},
+		},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			SoftIRQ: model.SoftIRQStats{
+				CPUs: lastSoftIRQ,
+			},
+			CPU: model.CPUStats{
+				CPUs: lastCPU,
+			},
+		},
+	}}
+}
+
+func cpuTime(cpu int, busy, idle uint64) model.CPUTimeStats {
+	return model.CPUTimeStats{CPU: cpu, User: busy, Idle: idle}
+}
+
+func assertNoReceiveCPUConcentration(t *testing.T, r model.Recording) {
+	t.Helper()
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range findings {
+		if finding.Summary == "Network receive processing was concentrated on a busy CPU" {
+			t.Fatalf("unexpected receive CPU concentration finding: %+v", findings)
+		}
+	}
+}
+
+func TestAnalyzeIgnoresForwardWallClockJump(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second), Interface: &model.InterfaceStats{}},
+		{Timestamp: now.Add(24 * time.Hour), ElapsedNanos: int64(3 * time.Second), Interface: &model.InterfaceStats{RXDropped: 1}},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if evidence := strings.Join(findings[0].Evidence, " "); !strings.Contains(evidence, "over 2.0 seconds") {
+		t.Fatalf("duration did not use elapsed time: %s", evidence)
+	}
+}
+
+func TestAnalyzeRejectsInvalidElapsedTime(t *testing.T) {
+	tests := []struct {
+		name    string
+		elapsed []int64
+	}{
+		{name: "equal", elapsed: []int64{1, 1}},
+		{name: "decreasing", elapsed: []int64{2, 1}},
+		{name: "intermediate decrease", elapsed: []int64{1, 3, 2, 4}},
+		{name: "negative start", elapsed: []int64{-1, 1}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			samples := make([]model.Sample, len(tt.elapsed))
+			for i, elapsed := range tt.elapsed {
+				samples[i] = model.Sample{Timestamp: time.Now().Add(time.Duration(i) * time.Second), ElapsedNanos: elapsed}
+			}
+			if _, err := Analyze(model.Recording{Version: model.FormatVersion, Samples: samples}); err == nil {
+				t.Fatal("expected invalid elapsed time error")
+			}
+		})
+	}
+}
+
+func TestAnalyzeLegacyRecordingUsesWallClockTime(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: 2, Samples: []model.Sample{
+		{Timestamp: now},
+		{Timestamp: now.Add(2 * time.Second)},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if evidence := strings.Join(findings[0].Evidence, " "); !strings.Contains(evidence, "across 2.0 seconds") {
+		t.Fatalf("legacy duration did not use wall time: %s", evidence)
+	}
+}

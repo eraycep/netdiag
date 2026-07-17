@@ -1,0 +1,3 @@
+                    CPU0       CPU1
+      NET_TX:          4          5
+      NET_RX:         10        nope
