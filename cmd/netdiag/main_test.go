@@ -186,6 +186,40 @@ func TestRecordContinuesWhenQdiscUnavailable(t *testing.T) {
 	assertCollectorStatus(t, recording.Collectors, "tc_qdisc", model.CollectorUnavailable)
 }
 
+func TestCompareCommand(t *testing.T) {
+	dir := t.TempDir()
+	baselinePath := filepath.Join(dir, "baseline.json")
+	incidentPath := filepath.Join(dir, "incident.json")
+
+	now := time.Now()
+	baseline := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second), TCP: model.TCPStats{OutSegments: 1000, Retransmits: 10}},
+		{Timestamp: now.Add(time.Second), ElapsedNanos: int64(2 * time.Second), TCP: model.TCPStats{OutSegments: 2000, Retransmits: 10}},
+	}}
+	incident := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second), TCP: model.TCPStats{OutSegments: 1000, Retransmits: 10}},
+		{Timestamp: now.Add(time.Second), ElapsedNanos: int64(2 * time.Second), TCP: model.TCPStats{OutSegments: 2000, Retransmits: 40}},
+	}}
+	writeTestRecording(t, baselinePath, baseline)
+	writeTestRecording(t, incidentPath, incident)
+
+	stdout := captureStdout(t, func() {
+		if err := compare([]string{baselinePath, incidentPath}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	for _, want := range []string{
+		"Comparison:",
+		"Incident-only findings:",
+		"TCP retransmissions were elevated during the capture",
+		"TCP retransmits: 0/1000 outbound segments (0.00%) -> 30/1000 outbound segments (3.00%)",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Fatalf("compare output missing %q:\n%s", want, stdout)
+		}
+	}
+}
+
 func TestBuildCollectorManifest(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -291,4 +325,42 @@ func captureStderr(t *testing.T, fn func()) string {
 		t.Fatal(err)
 	}
 	return string(data)
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	oldStdout := os.Stdout
+	read, write, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = write
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+
+	fn()
+
+	if err := write.Close(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := io.ReadAll(read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := read.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}
+
+func writeTestRecording(t *testing.T, path string, recording model.Recording) {
+	t.Helper()
+	data, err := json.Marshal(recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
 }

@@ -22,9 +22,11 @@ kernel-path attribution.
   scope
 - Best-effort optional collectors that degrade without aborting the capture
 - Local analyzer that reports findings with evidence and a concrete next step
+- Baseline-versus-incident comparison for two recordings
 - Fixture coverage for procfs/sysfs parsing and diagnostic rules
 - Root-enabled eBPF integration test for controlled TCP retransmissions
 - Reproducible packet-loss experiment using an isolated network namespace
+- Reproducible CPU-contention experiment for receive-path concentration
 - Capture-overhead benchmark scripts
 
 ## Build and run
@@ -59,6 +61,12 @@ Analyze the capture:
 
 ```sh
 ./bin/netdiag analyze capture.json
+```
+
+Compare a baseline capture against an incident capture:
+
+```sh
+./bin/netdiag compare baseline.json incident.json
 ```
 
 Disable eBPF explicitly when running unprivileged:
@@ -133,6 +141,12 @@ Each finding includes:
 - factual evidence;
 - next verification step.
 
+`netdiag compare` groups findings into incident-only, shared and baseline-only
+sets, reports collector visibility differences, and prints key counter delta
+changes such as TCP retransmits and qdisc drops. TCP retransmit deltas include
+outbound segment denominators and percentages so raw retransmit counts are not
+misread without traffic volume.
+
 Example:
 
 ```text
@@ -142,6 +156,34 @@ Severity: warning
 Evidence: 153 retransmitted of 1101 outbound TCP segments (13.90%)
 Evidence: eBPF observed 161 tcp_retransmit_skb tracepoint events
 Next step: Check packet loss, ECN/congestion signals, peer health, and interface error counters.
+```
+
+Comparison example:
+
+```text
+Comparison: qdisc-drop-baseline.json -> qdisc-drop-impaired.json
+
+Visibility differences:
+- none
+
+Incident-only findings:
+- TCP retransmissions were elevated during the capture
+- The selected interface qdisc recorded drops or overlimits
+
+Shared findings:
+- none
+
+Baseline-only findings:
+- none
+
+Key delta changes:
+- TCP retransmits: 3411/15204971 outbound segments (0.02%) -> 694/1829 outbound segments (37.94%)
+- top NET_RX softirq CPU: CPU14 7.3% of 629844 -> CPU2 92.1% of 8663
+- top NET_RX CPU busy: CPU14 50.6% -> CPU2 8.0%
+- qdisc drops: 0 -> 882
+- qdisc overlimits: 0 -> 0
+- interface drops: 0 -> 0
+- interface errors: 0 -> 0
 ```
 
 ## Development commands
@@ -184,7 +226,7 @@ make test-integration
 
 Regular `make test` remains unprivileged and skips this test.
 
-## Packet-loss experiment
+## Controlled experiments
 
 Run the reproducible isolated `tc netem` experiment with:
 
@@ -197,12 +239,40 @@ applying loss to an existing host interface. See
 [docs/experiments/tcp-loss.md](docs/experiments/tcp-loss.md) for setup,
 configuration, expected evidence and visibility limitations.
 
+Run the CPU-contention experiment with:
+
+```sh
+make experiment-cpu-contention
+```
+
+It records a baseline capture and an impaired capture with a CPU burner pinned
+to the target receive CPU. See
+[docs/experiments/cpu-contention.md](docs/experiments/cpu-contention.md) for
+parameters, expected evidence and tuning guidance.
+
+Run the qdisc-drop collection experiment with:
+
+```sh
+make experiment-qdisc-drop
+```
+
+It records a baseline capture and an impaired capture with a tiny delayed netem
+queue on a temporary host veth. See
+[docs/experiments/qdisc-drop.md](docs/experiments/qdisc-drop.md) for expected
+raw qdisc evidence and tuning guidance.
+
 ## Capture overhead benchmark
 
 Run the unprivileged recorder benchmark with:
 
 ```sh
 make benchmark
+```
+
+Run the privileged eBPF-enabled recorder benchmark with:
+
+```sh
+make benchmark-ebpf
 ```
 
 Set `INTERFACE` to include interface, IRQ and qdisc collectors:
@@ -213,6 +283,18 @@ INTERFACE=eth0 make benchmark
 
 See [docs/benchmarks/capture-overhead.md](docs/benchmarks/capture-overhead.md)
 for the test matrix, privileged eBPF mode and interpretation limits.
+
+Run the end-to-end workload impact benchmark with:
+
+```sh
+make benchmark-workload-impact
+```
+
+This compares local HTTP throughput with and without `netdiag record` running
+against an isolated veth workload driven by the `netdiag-workload` benchmark
+binary. See
+[docs/benchmarks/workload-impact.md](docs/benchmarks/workload-impact.md) for
+method, tuning and interpretation limits.
 
 ## Discovery documentation
 
@@ -232,6 +314,7 @@ targets.
 - IRQ-to-interface matching depends on kernel/driver naming and sysfs metadata.
 - CPU concentration findings are conservative correlations, not proof that CPU
   contention caused latency.
+- Queue-level NIC driver counters are deferred to Phase 4.
 - No packet payloads are collected by default.
 
 See [ROADMAP.md](ROADMAP.md) for product scope and implementation milestones.

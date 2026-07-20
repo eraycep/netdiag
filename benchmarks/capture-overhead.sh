@@ -37,8 +37,37 @@ mkdir -p "$(dirname -- "${RESULTS}")"
 work_dir=$(mktemp -d /tmp/netdiag-benchmark.XXXXXX)
 cleanup() {
   rm -rf "${work_dir}"
+  if [[ -e ${RESULTS} ]]; then
+    if [[ -n ${SUDO_UID:-} && -n ${SUDO_GID:-} ]]; then
+      chown "${SUDO_UID}:${SUDO_GID}" "${RESULTS}" 2>/dev/null || true
+    fi
+    chmod u+rw,go+r "${RESULTS}" 2>/dev/null || true
+  fi
 }
 trap cleanup EXIT INT TERM
+
+verify_ebpf_manifest() {
+  local capture=$1
+  python3 - "${capture}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], "r", encoding="utf-8") as source:
+    recording = json.load(source)
+
+for collector in recording.get("collectors", []):
+    if collector.get("collector_name") == "ebpf_tcp_retransmit":
+        status = collector.get("status")
+        if status == "enabled":
+            raise SystemExit(0)
+        reason = collector.get("failure_reason", "")
+        print(f"eBPF collector status is {status!r}; reason: {reason}", file=sys.stderr)
+        raise SystemExit(1)
+
+print("eBPF collector missing from recording manifest", file=sys.stderr)
+raise SystemExit(1)
+PY
+}
 
 {
   printf '# generated_at_utc\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -70,6 +99,9 @@ for interval in ${INTERVALS}; do
 
     "${TIME_BIN}" -f '%e\t%U\t%S\t%M' -o "${timing}" \
       "${NETDIAG_BIN}" "${record_args[@]}" >/dev/null
+    if [[ ${EBPF} == "true" ]]; then
+      verify_ebpf_manifest "${capture}"
+    fi
 
     IFS=$'\t' read -r wall user system max_rss <"${timing}"
     samples=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["samples"]))' "${capture}")

@@ -69,6 +69,11 @@ func Analyze(r model.Recording) ([]Finding, error) {
 			})
 		}
 	}
+	if !resets.qdisc {
+		if finding, ok := analyzeQdiscDrops(first, last); ok {
+			findings = append(findings, finding)
+		}
+	}
 	if !resets.softirq {
 		if finding, ok := analyzeReceiveCPUConcentration(first, last); ok {
 			findings = append(findings, finding)
@@ -83,6 +88,86 @@ func Analyze(r model.Recording) ([]Finding, error) {
 		})
 	}
 	return findings, nil
+}
+
+func analyzeQdiscDrops(first, last model.Sample) (Finding, bool) {
+	deltas, ok := qdiscDeltas(first.Qdisc, last.Qdisc)
+	if !ok {
+		return Finding{}, false
+	}
+
+	var evidence []string
+	var totalDrops, totalOverlimits uint64
+	var finalBacklogPackets uint64
+	for _, d := range deltas {
+		totalDrops += d.drops
+		totalOverlimits += d.overlimits
+		finalBacklogPackets += d.current.BacklogPackets
+		if d.drops+d.overlimits > 0 {
+			evidence = append(evidence, fmt.Sprintf(
+				"qdisc %s on %s recorded %d drops and %d overlimits",
+				d.current.Kind,
+				d.current.Interface,
+				d.drops,
+				d.overlimits,
+			))
+		}
+	}
+	if totalDrops+totalOverlimits == 0 {
+		return Finding{}, false
+	}
+	if finalBacklogPackets > 0 {
+		evidence = append(evidence, fmt.Sprintf("qdisc backlog ended at %d packets", finalBacklogPackets))
+	}
+
+	return Finding{
+		Severity:   "warning",
+		Confidence: "confirmed",
+		Summary:    "The selected interface qdisc recorded drops or overlimits",
+		Evidence:   evidence,
+		NextStep:   "Inspect qdisc configuration, traffic shaping, queue limits, and whether retransmissions align with qdisc drops.",
+	}, true
+}
+
+type qdiscDelta struct {
+	current    model.QdiscLineStats
+	drops      uint64
+	overlimits uint64
+}
+
+func qdiscDeltas(first, last model.QdiscStats) ([]qdiscDelta, bool) {
+	if len(first.Qdiscs) == 0 || len(last.Qdiscs) == 0 {
+		return nil, false
+	}
+	firstByKey := make(map[string]model.QdiscLineStats, len(first.Qdiscs))
+	for _, qdisc := range first.Qdiscs {
+		key := qdiscKey(qdisc)
+		if _, exists := firstByKey[key]; exists {
+			return nil, false
+		}
+		firstByKey[key] = qdisc
+	}
+	if len(firstByKey) != len(last.Qdiscs) {
+		return nil, false
+	}
+
+	deltas := make([]qdiscDelta, 0, len(last.Qdiscs))
+	for _, current := range last.Qdiscs {
+		previous, ok := firstByKey[qdiscKey(current)]
+		if !ok {
+			return nil, false
+		}
+		deltas = append(deltas, qdiscDelta{
+			current:    current,
+			drops:      current.Drops - previous.Drops,
+			overlimits: current.Overlimits - previous.Overlimits,
+		})
+	}
+	return deltas, true
+}
+
+func qdiscKey(qdisc model.QdiscLineStats) string {
+	return qdisc.Interface + "\x00" + qdisc.Kind + "\x00" + qdisc.Handle + "\x00" + qdisc.Parent
 }
 
 const (
@@ -312,6 +397,7 @@ type counterResetState struct {
 	softirq  bool
 	iface    bool
 	ebpf     bool
+	qdisc    bool
 	evidence []string
 }
 
@@ -359,8 +445,55 @@ func detectCounterResets(samples []model.Sample, useElapsed bool) counterResetSt
 			result.ebpf = result.ebpf || ebpfReset
 			record("eBPF TCP retransmit", ebpfReset)
 		}
+
+		qdiscReset, qdiscEvidence := qdiscCounterResetEvidence(previous.Qdisc, current.Qdisc, start, end)
+		result.qdisc = result.qdisc || qdiscReset
+		result.evidence = append(result.evidence, qdiscEvidence...)
 	}
 	return result
+}
+
+func qdiscCounterResetEvidence(previous, current model.QdiscStats, start, end string) (bool, []string) {
+	if len(previous.Qdiscs) == 0 || len(current.Qdiscs) == 0 {
+		return false, nil
+	}
+	previousByKey := make(map[string]model.QdiscLineStats, len(previous.Qdiscs))
+	for _, qdisc := range previous.Qdiscs {
+		key := qdiscKey(qdisc)
+		if _, exists := previousByKey[key]; exists {
+			return false, nil
+		}
+		previousByKey[key] = qdisc
+	}
+	if len(previousByKey) != len(current.Qdiscs) {
+		return false, nil
+	}
+
+	var evidence []string
+	for _, currentQdisc := range current.Qdiscs {
+		previousQdisc, ok := previousByKey[qdiscKey(currentQdisc)]
+		if !ok {
+			return false, nil
+		}
+		if qdiscCounterDecreased(previousQdisc, currentQdisc) {
+			evidence = append(evidence, fmt.Sprintf(
+				"qdisc %s on %s counter decreased between %s and %s",
+				currentQdisc.Kind,
+				currentQdisc.Interface,
+				start,
+				end,
+			))
+		}
+	}
+	return len(evidence) > 0, evidence
+}
+
+func qdiscCounterDecreased(previous, current model.QdiscLineStats) bool {
+	return decreased(current.Bytes, previous.Bytes) ||
+		decreased(current.Packets, previous.Packets) ||
+		decreased(current.Drops, previous.Drops) ||
+		decreased(current.Overlimits, previous.Overlimits) ||
+		decreased(current.Requeues, previous.Requeues)
 }
 
 func softIRQCounterResetEvidence(previous, current model.SoftIRQStats, start, end string) (bool, []string) {

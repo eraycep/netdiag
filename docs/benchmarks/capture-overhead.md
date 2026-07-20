@@ -31,18 +31,25 @@ make benchmark
 Measure the eBPF-enabled path separately with root privileges:
 
 ```sh
+make benchmark-ebpf
+```
+
+Do not combine privileged and unprivileged runs in one result table. When
+`EBPF=true`, the benchmark validates each recording manifest and fails if the
+`ebpf_tcp_retransmit` collector is unavailable or missing.
+
+To customize the privileged run:
+
+```sh
 sudo env \
   NETDIAG_BIN="$PWD/bin/netdiag" \
   EBPF=true \
   DURATION_SECONDS=30 \
   REPETITIONS=5 \
+  INTERVALS="100ms 500ms 1s" \
   bash benchmarks/capture-overhead.sh \
   benchmarks/results/capture-overhead-ebpf.tsv
 ```
-
-Do not combine privileged and unprivileged runs in one result table. Confirm
-the recording manifest says the eBPF collector was enabled before describing a
-run as eBPF-enabled.
 
 ## Interpretation
 
@@ -82,6 +89,25 @@ collector is optimized and remeasured.
 
 GNU time reports CPU time with limited resolution in these short runs, so the
 0.100% values should be interpreted as low measurements rather than precise
-estimates. Longer five-repetition runs are required for release claims. The
-eBPF-enabled path and end-to-end workload impact remain separate follow-up
-measurements.
+estimates. Longer five-repetition runs are required for release claims.
+
+## eBPF-enabled result
+
+Measured 2026-07-18 on the current development host:
+
+- Hostname: `eray-pc`
+- Kernel: Ubuntu `6.8.0-136-generic`
+- Collectors: procfs TCP/softirq/CPU plus host-wide
+  `ebpf_tcp_retransmit`; no selected interface
+- eBPF manifest validation: enabled for every run
+- Run length: 30 seconds, five repetitions per interval
+
+| Interval | Runs | Median CPU | CPU range | Peak RSS | Mean samples | Mean output | Bytes/sample |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 100 ms | 5 | 1.130% | 1.097–1.131% | 15188 KiB | 300 | 2004862 B | 6682.9 B |
+| 500 ms | 5 | 0.200% | 0.200–0.233% | 10112 KiB | 60 | 402059 B | 6701.0 B |
+| 1 s | 5 | 0.100% | 0.067–0.133% | 8064 KiB | 30 | 201761 B | 6725.4 B |
+
+The 500 ms and 1 s intervals satisfy the less-than-1% recorder CPU target with
+the current host-wide eBPF retransmission counter enabled. The 100 ms interval
+does not satisfy the target and remains experimental.

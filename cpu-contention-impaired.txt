@@ -1,0 +1,6 @@
+Finding 1: Network receive processing was concentrated on a busy CPU
+Confidence: strong correlation
+Severity: warning
+Evidence: CPU1 handled 83.1% of NET_RX softirq work
+Evidence: CPU1 was 100.0% busy during the capture
+Next step: Check RSS/IRQ affinity and whether application workers or CPU-intensive tasks share the same CPU.

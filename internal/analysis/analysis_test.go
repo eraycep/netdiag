@@ -289,6 +289,134 @@ func TestAnalyzeDoesNotReportReceiveCPUConcentrationWhenSoftIRQResetDetected(t *
 	}
 }
 
+func TestAnalyzeReportsQdiscDrops(t *testing.T) {
+	r := qdiscRecording(
+		[]model.QdiscLineStats{
+			qdiscLine("eth0", "netem", "8001", "root", 1000, 100, 0, 0, 0, 0),
+		},
+		[]model.QdiscLineStats{
+			qdiscLine("eth0", "netem", "8001", "root", 2000, 200, 882, 0, 0, 1),
+		},
+	)
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *Finding
+	for i := range findings {
+		if findings[i].Summary == "The selected interface qdisc recorded drops or overlimits" {
+			found = &findings[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("missing qdisc finding: %+v", findings)
+	}
+	evidence := strings.Join(found.Evidence, " ")
+	for _, want := range []string{"qdisc netem on eth0 recorded 882 drops and 0 overlimits", "qdisc backlog ended at 1 packets"} {
+		if !strings.Contains(evidence, want) {
+			t.Fatalf("missing evidence %q in %q", want, evidence)
+		}
+	}
+}
+
+func TestAnalyzeReportsQdiscOverlimits(t *testing.T) {
+	r := qdiscRecording(
+		[]model.QdiscLineStats{
+			qdiscLine("eth0", "htb", "1", "root", 1000, 100, 0, 2, 0, 0),
+		},
+		[]model.QdiscLineStats{
+			qdiscLine("eth0", "htb", "1", "root", 2000, 200, 0, 7, 0, 0),
+		},
+	)
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	if findings[0].Summary != "The selected interface qdisc recorded drops or overlimits" ||
+		!strings.Contains(evidence, "0 drops and 5 overlimits") {
+		t.Fatalf("unexpected findings: %+v", findings)
+	}
+}
+
+func TestAnalyzeDoesNotReportQdiscFindingWhenCountersDoNotIncrease(t *testing.T) {
+	r := qdiscRecording(
+		[]model.QdiscLineStats{
+			qdiscLine("eth0", "netem", "8001", "root", 1000, 100, 0, 0, 0, 0),
+		},
+		[]model.QdiscLineStats{
+			qdiscLine("eth0", "netem", "8001", "root", 2000, 200, 0, 0, 0, 0),
+		},
+	)
+
+	assertNoQdiscFinding(t, r)
+}
+
+func TestAnalyzeReportsQdiscCounterReset(t *testing.T) {
+	r := qdiscRecording(
+		[]model.QdiscLineStats{
+			qdiscLine("eth0", "netem", "8001", "root", 2000, 200, 10, 0, 0, 0),
+		},
+		[]model.QdiscLineStats{
+			qdiscLine("eth0", "netem", "8001", "root", 1000, 100, 1, 0, 0, 0),
+		},
+	)
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	if !strings.Contains(findings[0].Summary, "counters reset") || !strings.Contains(evidence, "qdisc netem on eth0 counter decreased") {
+		t.Fatalf("expected qdisc reset finding: %+v", findings)
+	}
+}
+
+func TestAnalyzeSuppressesQdiscFindingWhenQdiscResetDetected(t *testing.T) {
+	r := qdiscRecording(
+		[]model.QdiscLineStats{
+			qdiscLine("eth0", "netem", "8001", "root", 2000, 200, 10, 0, 0, 0),
+		},
+		[]model.QdiscLineStats{
+			qdiscLine("eth0", "netem", "8001", "root", 1000, 100, 20, 0, 0, 0),
+		},
+	)
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range findings {
+		if finding.Summary == "The selected interface qdisc recorded drops or overlimits" {
+			t.Fatalf("unexpected qdisc finding with reset: %+v", findings)
+		}
+	}
+}
+
+func TestAnalyzeSuppressesQdiscFindingWhenQdiscSetChanged(t *testing.T) {
+	r := qdiscRecording(
+		[]model.QdiscLineStats{
+			qdiscLine("eth0", "fq_codel", "0", "root", 1000, 100, 0, 0, 0, 0),
+		},
+		[]model.QdiscLineStats{
+			qdiscLine("eth0", "netem", "8001", "root", 2000, 200, 10, 0, 0, 0),
+		},
+	)
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range findings {
+		if strings.Contains(finding.Summary, "qdisc") || strings.Contains(strings.Join(finding.Evidence, " "), "qdisc") {
+			t.Fatalf("qdisc set change produced qdisc finding/reset: %+v", findings)
+		}
+	}
+}
+
 func TestAnalyzeUsesElapsedTimeWhenWallClockMovesBackward(t *testing.T) {
 	now := time.Now()
 	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
@@ -344,6 +472,50 @@ func assertNoReceiveCPUConcentration(t *testing.T, r model.Recording) {
 	for _, finding := range findings {
 		if finding.Summary == "Network receive processing was concentrated on a busy CPU" {
 			t.Fatalf("unexpected receive CPU concentration finding: %+v", findings)
+		}
+	}
+}
+
+func qdiscRecording(firstQdiscs, lastQdiscs []model.QdiscLineStats) model.Recording {
+	now := time.Now()
+	return model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{
+			Timestamp:    now,
+			ElapsedNanos: int64(time.Second),
+			Qdisc:        model.QdiscStats{Qdiscs: firstQdiscs},
+		},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			Qdisc:        model.QdiscStats{Qdiscs: lastQdiscs},
+		},
+	}}
+}
+
+func qdiscLine(iface, kind, handle, parent string, bytes, packets, drops, overlimits, requeues, backlogPackets uint64) model.QdiscLineStats {
+	return model.QdiscLineStats{
+		Interface:      iface,
+		Kind:           kind,
+		Handle:         handle,
+		Parent:         parent,
+		Bytes:          bytes,
+		Packets:        packets,
+		Drops:          drops,
+		Overlimits:     overlimits,
+		Requeues:       requeues,
+		BacklogPackets: backlogPackets,
+	}
+}
+
+func assertNoQdiscFinding(t *testing.T, r model.Recording) {
+	t.Helper()
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range findings {
+		if finding.Summary == "The selected interface qdisc recorded drops or overlimits" {
+			t.Fatalf("unexpected qdisc finding: %+v", findings)
 		}
 	}
 }

@@ -36,6 +36,8 @@ func run(args []string) error {
 		return record(args[1:])
 	case "analyze":
 		return analyze(args[1:])
+	case "compare":
+		return compare(args[1:])
 	case "help", "-h", "--help":
 		return usage()
 	default:
@@ -44,7 +46,7 @@ func run(args []string) error {
 }
 
 func usage() error {
-	fmt.Println("usage:\n  netdiag record [options]\n  netdiag analyze <capture.json>")
+	fmt.Println("usage:\n  netdiag record [options]\n  netdiag analyze <capture.json>\n  netdiag compare <baseline.json> <incident.json>")
 	return nil
 }
 
@@ -202,13 +204,9 @@ func analyze(args []string) error {
 	if len(args) != 1 {
 		return errors.New("usage: netdiag analyze <capture.json>")
 	}
-	data, err := os.ReadFile(args[0])
+	r, err := readRecording(args[0])
 	if err != nil {
 		return err
-	}
-	var r model.Recording
-	if err := json.Unmarshal(data, &r); err != nil {
-		return fmt.Errorf("decode recording: %w", err)
 	}
 	findings, err := analysis.Analyze(r)
 	if err != nil {
@@ -216,6 +214,38 @@ func analyze(args []string) error {
 	}
 	fmt.Print(analysis.Render(findings))
 	return nil
+}
+
+func compare(args []string) error {
+	if len(args) != 2 {
+		return errors.New("usage: netdiag compare <baseline.json> <incident.json>")
+	}
+	baseline, err := readRecording(args[0])
+	if err != nil {
+		return fmt.Errorf("read baseline: %w", err)
+	}
+	incident, err := readRecording(args[1])
+	if err != nil {
+		return fmt.Errorf("read incident: %w", err)
+	}
+	comparison, err := analysis.Compare(baseline, incident)
+	if err != nil {
+		return err
+	}
+	fmt.Print(analysis.RenderComparison(args[0], args[1], comparison))
+	return nil
+}
+
+func readRecording(path string) (model.Recording, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return model.Recording{}, err
+	}
+	var r model.Recording
+	if err := json.Unmarshal(data, &r); err != nil {
+		return model.Recording{}, fmt.Errorf("decode recording: %w", err)
+	}
+	return r, nil
 }
 
 func buildCollectorManifest(iface string, useEBPF bool) []model.CollectorManifest {

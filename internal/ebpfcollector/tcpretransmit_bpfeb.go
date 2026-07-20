@@ -8,9 +8,23 @@ import (
 	_ "embed"
 	"fmt"
 	"io"
+	"structs"
 
 	"github.com/cilium/ebpf"
 )
+
+type tcpRetransmitFlow4Key struct {
+	_     structs.HostLayout
+	Saddr uint32
+	Daddr uint32
+	Sport uint16
+	Dport uint16
+}
+
+type tcpRetransmitNetdiagFlowStats struct {
+	_           structs.HostLayout
+	Retransmits uint64
+}
 
 // loadTcpRetransmit returns the embedded CollectionSpec for tcpRetransmit.
 func loadTcpRetransmit() (*ebpf.CollectionSpec, error) {
@@ -61,7 +75,8 @@ type tcpRetransmitProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type tcpRetransmitMapSpecs struct {
-	RetransmitCount *ebpf.MapSpec `ebpf:"retransmit_count"`
+	RetransmitCount    *ebpf.MapSpec `ebpf:"retransmit_count"`
+	TcpRetransmitFlows *ebpf.MapSpec `ebpf:"tcp_retransmit_flows"`
 }
 
 // tcpRetransmitVariableSpecs contains global variables before they are loaded into the kernel.
@@ -90,12 +105,14 @@ func (o *tcpRetransmitObjects) Close() error {
 //
 // It can be passed to loadTcpRetransmitObjects or ebpf.CollectionSpec.LoadAndAssign.
 type tcpRetransmitMaps struct {
-	RetransmitCount *ebpf.Map `ebpf:"retransmit_count"`
+	RetransmitCount    *ebpf.Map `ebpf:"retransmit_count"`
+	TcpRetransmitFlows *ebpf.Map `ebpf:"tcp_retransmit_flows"`
 }
 
 func (m *tcpRetransmitMaps) Close() error {
 	return _TcpRetransmitClose(
 		m.RetransmitCount,
+		m.TcpRetransmitFlows,
 	)
 }
 

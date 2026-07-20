@@ -1,0 +1,5 @@
+Finding 1: No counter-level network anomaly was detected
+Confidence: unknown
+Severity: info
+Evidence: analyzed 20 samples across 19.0 seconds
+Next step: Use per-flow and scheduler instrumentation before excluding kernel or application latency.

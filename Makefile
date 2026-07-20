@@ -1,7 +1,8 @@
-.PHONY: build test test-integration experiment-loss benchmark fmt generate
+.PHONY: build test test-integration experiment-loss experiment-cpu-contention experiment-qdisc-drop benchmark benchmark-ebpf benchmark-workload-impact fmt generate
 
 build:
 	go build -buildvcs=false -o bin/netdiag ./cmd/netdiag
+	go build -buildvcs=false -o bin/netdiag-workload ./cmd/netdiag-workload
 
 test:
 	go test ./...
@@ -15,11 +16,23 @@ test-integration:
 experiment-loss: build
 	sudo env NETDIAG_BIN="$(CURDIR)/bin/netdiag" bash experiments/tcp-loss.sh "$(CURDIR)/loss-capture.json"
 
+experiment-cpu-contention: build
+	sudo env NETDIAG_BIN="$(CURDIR)/bin/netdiag" bash experiments/cpu-contention.sh "$(CURDIR)"
+
+experiment-qdisc-drop: build
+	sudo env NETDIAG_BIN="$(CURDIR)/bin/netdiag" bash experiments/qdisc-drop.sh "$(CURDIR)"
+
 benchmark: build
 	NETDIAG_BIN="$(CURDIR)/bin/netdiag" bash benchmarks/capture-overhead.sh
+
+benchmark-ebpf: build
+	sudo env NETDIAG_BIN="$(CURDIR)/bin/netdiag" EBPF=true DURATION_SECONDS=30 REPETITIONS=5 bash benchmarks/capture-overhead.sh "$(CURDIR)/benchmarks/results/capture-overhead-ebpf.tsv"
+
+benchmark-workload-impact: build
+	sudo env NETDIAG_BIN="$(CURDIR)/bin/netdiag" bash benchmarks/workload-impact.sh "$(CURDIR)/benchmarks/results/workload-impact.tsv"
 
 fmt:
 	gofmt -w cmd internal
 
 generate:
-	go generate ./internal/ebpfcollector
+	GOCACHE="$${GOCACHE:-/tmp/netdiag-go-cache}" go generate ./internal/ebpfcollector

@@ -28,19 +28,31 @@ Completed:
 
 - `record` and `analyze` CLI skeleton.
 - Versioned JSON recording format.
-- Host-wide TCP and softirq collection from procfs.
+- Host-wide TCP collection from procfs.
+- Per-CPU and total softirq collection from procfs.
+- Per-CPU scheduler counters and optional CPU pressure collection.
+- Selected-interface IRQ count and affinity collection when kernel metadata
+  permits association.
+- Selected-interface qdisc counter collection through `tc -s qdisc`.
 - Interface packet, byte, drop and error collection from sysfs.
-- Initial retransmission and interface-drop findings.
+- Retransmission, interface-drop, receive-CPU-concentration and qdisc
+  drops/overlimits findings.
 - Minimal eBPF loader, generated bindings and embedded object.
 - Host-wide `tcp_retransmit_skb` tracepoint counter.
-- Graceful procfs/sysfs fallback when BPF cannot be loaded.
-- Unit coverage for the initial analysis rule.
+- Graceful optional-collector fallback when BPF, IRQ or qdisc collection is
+  unavailable.
+- Unit coverage for current parsing and analysis rules.
 - Recording-level collector visibility manifest.
 - Atomic, sample-bounded recording writes and monotonic elapsed time.
 - Fixture coverage for procfs/sysfs parsing and counter resets.
 - Root-enabled controlled retransmission integration test.
 - Reproducible packet-loss experiment with documented evidence.
+- Reproducible CPU-contention experiment validating receive CPU concentration.
+- Reproducible qdisc-drop experiment validating qdisc collection and analysis.
+- Baseline-versus-incident comparison command.
 - Initial CPU, memory and output-size benchmark at 100 ms, 500 ms and 1 s.
+- Workload-impact benchmark tooling for controlled local HTTP experiments.
+- eBPF-enabled recorder overhead benchmark at 100 ms, 500 ms and 1 s.
 
 Current limitations:
 
@@ -49,9 +61,22 @@ Current limitations:
 - Counter correlation cannot locate latency within the kernel path.
 - Procfs TCP counters are network-namespace scoped while the eBPF counter is
   host-wide, so their retransmission deltas need not match.
-- Qdisc, IRQ affinity, scheduler and per-socket visibility are not collected.
-- The eBPF-enabled overhead path and end-to-end workload impact still need
-  benchmarks.
+- Qdisc collection depends on `tc` and netlink access.
+- IRQ-to-interface mapping depends on sysfs metadata and driver naming.
+- CPU concentration and qdisc findings are conservative correlations, not
+  causal proof.
+- Per-flow socket attribution is not implemented.
+- Queue-level NIC driver counters are explicitly deferred to Phase 4; Phase 1
+  uses interface, IRQ, qdisc, softirq and TCP counters only.
+- Baseline-versus-incident comparison currently compares finding sets,
+  collector visibility and key counter deltas; it does not yet compare tail
+  latency percentiles.
+- The eBPF-enabled recorder benchmark measured 0.200% median CPU at 500 ms and
+  0.100% median CPU at 1 s. The 100 ms interval measured 1.130% median CPU and
+  remains experimental.
+- The Go workload-impact benchmark measured 0.09% median throughput impact and
+  0.064 ms median p99 delta with eBPF disabled on the current controlled local
+  HTTP workload.
 - The 100 ms procfs/sysfs capture interval measured 0.998–1.299% CPU and does
   not reliably satisfy the less-than-1% target; 500 ms and 1 s did.
 
@@ -95,17 +120,32 @@ Exit criterion: three design partners agree to run captures in staging.
 
 ## Phase 1: host flight recorder (weeks 2-6)
 
-- Versioned recording format and bounded local storage.
-- Capture TCP, softirq, IRQ affinity, CPU scheduling, qdisc and interface data.
-- Baseline-versus-incident comparison.
-- Evidence-backed findings for retransmissions, drops and softirq saturation.
-- Capture overhead benchmarks and failure-injection fixtures.
+Implemented:
+
+- [x] Versioned recording format and bounded local storage.
+- [x] Capture TCP, softirq, IRQ affinity, CPU scheduling, qdisc and interface
+  data.
+- [x] Evidence-backed findings for retransmissions, interface drops/errors,
+  receive CPU concentration and qdisc drops/overlimits.
+- [x] Capture overhead benchmark for unprivileged procfs/sysfs collection.
+- [x] Failure-injection fixtures and controlled packet-loss, CPU-contention and
+  qdisc-drop experiments.
+- [x] Baseline-versus-incident comparison for finding sets, collector
+  visibility and key counter deltas.
+- [x] Workload-impact benchmark tooling for controlled local HTTP experiments.
+- [x] Workload-impact benchmark result for the eBPF-disabled controlled local
+  HTTP benchmark.
+- [x] eBPF-enabled overhead benchmark.
+- [x] Queue-level NIC driver counters explicitly deferred to Phase 4.
 
 Exit criterion: correctly classify controlled loss, CPU contention and queue
 drop experiments with less than 2% workload overhead.
 
-The repository scaffold implements the first thin slice of this phase and a
+The repository now implements the host-counter slice of this phase and a
 minimal eBPF tracepoint counter used to validate the loader and fallback path.
+Phase 1 is complete for the current controlled local environment. External
+host/kernel validation remains a Phase 0B/design-partner activity rather than a
+blocking Phase 1 implementation task.
 
 ## Phase 2: per-flow TCP and scheduler attribution (months 2-4)
 
