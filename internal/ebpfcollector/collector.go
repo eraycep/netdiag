@@ -3,13 +3,15 @@ package ebpfcollector
 import (
 	"errors"
 	"fmt"
+	"net"
+	"sort"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/eray/netdiag/internal/model"
 )
 
 // Collector counts kernel TCP retransmit tracepoint events. It deliberately
-// keeps no packet payloads, addresses, ports, or process identifiers.
+// keeps no packet payloads or process identifiers.
 type Collector struct {
 	objects tcpRetransmitObjects
 	link    link.Link
@@ -39,7 +41,15 @@ func (c *Collector) Sample() (model.EBPFStats, error) {
 	if err := c.objects.RetransmitCount.Lookup(&key, &count); err != nil {
 		return model.EBPFStats{}, fmt.Errorf("read retransmit counter: %w", err)
 	}
-	return model.EBPFStats{TCPRetransmitEvents: count}, nil
+
+	flows, err := c.TCPRetransmitFlows()
+	if err != nil {
+		// Per-flow attribution is best-effort. Keep the host-wide eBPF signal
+		// available if the flow map cannot be read.
+		return model.EBPFStats{TCPRetransmitEvents: count}, nil
+	}
+
+	return model.EBPFStats{TCPRetransmitEvents: count, TCPRetransmitFlows: flows}, nil
 }
 
 func (c *Collector) Close() error {
@@ -47,4 +57,61 @@ func (c *Collector) Close() error {
 		return nil
 	}
 	return errors.Join(c.link.Close(), c.objects.Close())
+}
+
+func ipv4String(addr uint32) string {
+	return net.IPv4(
+		byte(addr),
+		byte(addr>>8),
+		byte(addr>>16),
+		byte(addr>>24),
+	).String()
+}
+
+func retransmitFlowFromBPF(key tcpRetransmitFlow4Key, value tcpRetransmitNetdiagFlowStats) model.TCPRetransmitFlow {
+	return model.TCPRetransmitFlow{
+		SourceAddress:      ipv4String(key.Saddr),
+		DestinationAddress: ipv4String(key.Daddr),
+		SourcePort:         key.Sport,
+		DestinationPort:    key.Dport,
+		Retransmits:        value.Retransmits,
+	}
+}
+
+func (c *Collector) TCPRetransmitFlows() ([]model.TCPRetransmitFlow, error) {
+	iter := c.objects.TcpRetransmitFlows.Iterate()
+
+	var key tcpRetransmitFlow4Key
+	var value tcpRetransmitNetdiagFlowStats
+	var flows []model.TCPRetransmitFlow
+
+	for iter.Next(&key, &value) {
+		flows = append(flows, retransmitFlowFromBPF(key, value))
+	}
+
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("iterate tcp retransmit flow map: %w", err)
+	}
+
+	sortRetransmitFlows(flows)
+
+	return flows, nil
+}
+
+func sortRetransmitFlows(flows []model.TCPRetransmitFlow) {
+	sort.Slice(flows, func(i, j int) bool {
+		if flows[i].Retransmits != flows[j].Retransmits {
+			return flows[i].Retransmits > flows[j].Retransmits
+		}
+		if flows[i].SourceAddress != flows[j].SourceAddress {
+			return flows[i].SourceAddress < flows[j].SourceAddress
+		}
+		if flows[i].DestinationAddress != flows[j].DestinationAddress {
+			return flows[i].DestinationAddress < flows[j].DestinationAddress
+		}
+		if flows[i].SourcePort != flows[j].SourcePort {
+			return flows[i].SourcePort < flows[j].SourcePort
+		}
+		return flows[i].DestinationPort < flows[j].DestinationPort
+	})
 }

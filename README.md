@@ -106,6 +106,7 @@ wall-clock corrections cannot create invalid capture durations.
 | IRQ counts and affinity | `/proc/interrupts`, `/proc/irq/*/smp_affinity_list`, `/sys/class/net/*/device/msi_irqs` | selected interface when discoverable |
 | Qdisc counters | `tc -s qdisc show dev <iface>` | selected interface |
 | TCP retransmit tracepoint count | eBPF `tcp_retransmit_skb` | host-wide |
+| TCP retransmit per-flow counters | eBPF `tcp_retransmit_skb` | bounded IPv4 flow tuples, host-wide source |
 | Host metadata | hostname, kernel release | host |
 
 The IRQ, qdisc and eBPF collectors are best-effort optional signals. If one of
@@ -305,8 +306,9 @@ targets.
 
 ## Limitations
 
-- The eBPF retransmit count is host-wide, not scoped to the selected interface,
-  process, socket or flow.
+- The eBPF retransmit event count is host-wide. Bounded IPv4 per-flow
+  retransmit counters are also collected, but they are not scoped to the
+  selected interface or process and do not include IPv6.
 - Procfs TCP counters are network-namespace scoped while the eBPF counter is
   host-wide, so their retransmission deltas need not match.
 - Counter correlation does not locate latency precisely inside the kernel path.

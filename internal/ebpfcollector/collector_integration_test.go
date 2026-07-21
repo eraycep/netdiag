@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"testing"
 	"time"
+
+	"github.com/eray/netdiag/internal/model"
 )
 
 const (
@@ -55,6 +57,15 @@ func TestTCPRetransmitIntegration(t *testing.T) {
 		t.Fatalf("tcp_retransmit_skb count did not increase: before=%d after=%d", before.TCPRetransmitEvents, after.TCPRetransmitEvents)
 	}
 	t.Logf("tcp_retransmit_skb count increased from %d to %d", before.TCPRetransmitEvents, after.TCPRetransmitEvents)
+
+	if len(after.TCPRetransmitFlows) == 0 {
+		t.Fatalf("expected at least one TCP retransmit flow, got none: %+v", after)
+	}
+	flow, ok := findLoopbackRetransmitFlow(after.TCPRetransmitFlows)
+	if !ok {
+		t.Fatalf("expected loopback retransmit flow, got %+v", after.TCPRetransmitFlows)
+	}
+	t.Logf("observed tcp_retransmit_skb flow: %+v", flow)
 }
 
 // TestTCPRetransmitTrafficHelper runs only as a subprocess inside the network
@@ -129,4 +140,15 @@ func runCommand(t *testing.T, path string, args ...string) {
 	if output, err := exec.Command(path, args...).CombinedOutput(); err != nil {
 		t.Fatalf("%s: %v: %s", fmt.Sprintf("%s %v", path, args), err, output)
 	}
+}
+
+func findLoopbackRetransmitFlow(flows []model.TCPRetransmitFlow) (model.TCPRetransmitFlow, bool) {
+	for _, flow := range flows {
+		if flow.SourceAddress == "127.0.0.1" &&
+			flow.DestinationAddress == "127.0.0.1" &&
+			flow.Retransmits > 0 {
+			return flow, true
+		}
+	}
+	return model.TCPRetransmitFlow{}, false
 }

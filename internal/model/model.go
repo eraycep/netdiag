@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-const FormatVersion = 7
+const FormatVersion = 8
 
 type CollectorStatus string
 
@@ -37,10 +37,6 @@ type Sample struct {
 	IRQ          IRQStats        `json:"irq"`
 	Qdisc        QdiscStats      `json:"qdisc"`
 	CPU          CPUStats        `json:"cpu"`
-}
-
-type EBPFStats struct {
-	TCPRetransmitEvents uint64 `json:"tcp_retransmit_events"`
 }
 
 type TCPStats struct {
@@ -131,6 +127,19 @@ type InterfaceStats struct {
 	TXDropped uint64 `json:"tx_dropped"`
 	RXErrors  uint64 `json:"rx_errors"`
 	TXErrors  uint64 `json:"tx_errors"`
+}
+
+type EBPFStats struct {
+	TCPRetransmitEvents uint64              `json:"tcp_retransmit_events"`
+	TCPRetransmitFlows  []TCPRetransmitFlow `json:"tcp_retransmit_flows,omitempty"`
+}
+
+type TCPRetransmitFlow struct {
+	SourceAddress      string `json:"source_address"`
+	DestinationAddress string `json:"destination_address"`
+	SourcePort         uint16 `json:"source_port"`
+	DestinationPort    uint16 `json:"destination_port"`
+	Retransmits        uint64 `json:"retransmits"`
 }
 
 type CollectorManifest struct {

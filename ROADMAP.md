@@ -39,6 +39,8 @@ Completed:
   drops/overlimits findings.
 - Minimal eBPF loader, generated bindings and embedded object.
 - Host-wide `tcp_retransmit_skb` tracepoint counter.
+- Bounded IPv4 per-flow `tcp_retransmit_skb` counters with root-enabled
+  integration coverage.
 - Graceful optional-collector fallback when BPF, IRQ or qdisc collection is
   unavailable.
 - Unit coverage for current parsing and analysis rules.
@@ -56,8 +58,9 @@ Completed:
 
 Current limitations:
 
-- The eBPF count is host-wide, not scoped to the selected interface, process,
-  socket or flow.
+- The eBPF retransmit event count is host-wide. Bounded IPv4 per-flow
+  retransmit counters are available, but they are not scoped to the selected
+  interface or process and do not include IPv6.
 - Counter correlation cannot locate latency within the kernel path.
 - Procfs TCP counters are network-namespace scoped while the eBPF counter is
   host-wide, so their retransmission deltas need not match.
@@ -65,7 +68,8 @@ Current limitations:
 - IRQ-to-interface mapping depends on sysfs metadata and driver naming.
 - CPU concentration and qdisc findings are conservative correlations, not
   causal proof.
-- Per-flow socket attribution is not implemented.
+- Per-flow socket attribution is limited to IPv4 retransmit counters; connect
+  latency, RTT, congestion state and socket queues are not implemented.
 - Queue-level NIC driver counters are explicitly deferred to Phase 4; Phase 1
   uses interface, IRQ, qdisc, softirq and TCP counters only.
 - Baseline-versus-incident comparison currently compares finding sets,
@@ -149,9 +153,17 @@ blocking Phase 1 implementation task.
 
 ## Phase 2: per-flow TCP and scheduler attribution (months 2-4)
 
+Implemented:
+
+- [x] Bounded IPv4 per-flow retransmission counters from `tcp_retransmit_skb`.
+- [x] Root integration test verifies a controlled retransmission produces both
+  a host-wide eBPF event increase and a loopback per-flow entry.
+
+Remaining:
+
 - Expand the CO-RE eBPF collector with feature detection and graceful
   degradation beyond the initial host-wide tracepoint counter.
-- Track connect latency, retransmits, RTT, congestion state and socket queues.
+- Track connect latency, RTT, congestion state and socket queues.
 - Measure wakeup-to-run delay for selected service processes.
 - Correlate flow events without retaining payloads.
 - Add capture budgets, sampling and cardinality controls.

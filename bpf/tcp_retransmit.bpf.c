@@ -50,8 +50,8 @@ int count_tcp_retransmit(struct trace_event_raw_tcp_event_sk_skb *skb)
 		return 0;
 	}
 
-	__builtin_memcpy(&flow_key.saddr, skb->saddr, sizeof(flow_key.saddr));
-	__builtin_memcpy(&flow_key.daddr, skb->daddr, sizeof(flow_key.daddr));
+	BPF_CORE_READ_INTO(&flow_key.saddr, skb, saddr);
+	BPF_CORE_READ_INTO(&flow_key.daddr, skb, daddr);
 	BPF_CORE_READ_INTO(&flow_key.sport, skb, sport);
 	BPF_CORE_READ_INTO(&flow_key.dport, skb, dport);
 

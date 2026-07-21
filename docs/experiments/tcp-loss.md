@@ -47,13 +47,17 @@ In the recording, compare the first and last samples:
 - `tcp.out_segments` should increase because the host client sends traffic.
 - `tcp.retransmits` should increase as lost host-side packets are retransmitted.
 - `ebpf.tcp_retransmit_events` should increase when eBPF loaded successfully.
+- `ebpf.tcp_retransmit_flows` should include bounded IPv4 flow counters when
+  the retransmitting sockets are IPv4.
 - Analysis should normally report elevated TCP retransmissions with strong
   correlation.
 
 The procfs retransmission delta and eBPF event delta need not be equal. Procfs
-is scoped to the host network namespace, while the current eBPF program is
-host-wide and observes all network namespaces. Sampling boundaries can also
-place events just outside the first-to-last delta.
+is scoped to the host network namespace, while the current eBPF program observes
+host-wide tracepoint events across network namespaces. The eBPF per-flow
+counters identify IPv4 flow tuples but are not scoped to the selected interface
+or process. Sampling boundaries can also place events just outside the
+first-to-last delta.
 
 Do not expect `interface.tx_dropped` or `interface.rx_dropped` to increase.
 `netem` drops packets in the qdisc path, and those drops are not generally
