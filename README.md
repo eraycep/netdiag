@@ -75,6 +75,15 @@ Disable eBPF explicitly when running unprivileged:
 ./bin/netdiag record --ebpf=false --duration 30s --output capture.json
 ```
 
+Limit serialized eBPF per-flow retransmit entries:
+
+```sh
+./bin/netdiag record --max-ebpf-flows=64 --duration 30s --output capture.json
+```
+
+Use `--max-ebpf-flows=0` to keep the host-wide eBPF retransmission counter and
+flow-count metadata while omitting per-flow entries from each sample.
+
 ## Recording behavior
 
 Recordings stop when either `--duration` or `--max-samples` is reached. The
@@ -94,6 +103,12 @@ The recording format is versioned JSON. Each sample includes:
 Version 3 and later recordings use monotonic elapsed time during analysis, so
 wall-clock corrections cannot create invalid capture durations.
 
+eBPF per-flow retransmission entries are bounded twice: the kernel map uses an
+LRU cap, and the recorder serializes at most `--max-ebpf-flows` entries per
+sample. Samples include `tcp_retransmit_flow_count` and
+`tcp_retransmit_flows_truncated` when the flow map contains more entries than
+were serialized.
+
 ## Current signals
 
 | Signal | Source | Scope |
@@ -106,7 +121,7 @@ wall-clock corrections cannot create invalid capture durations.
 | IRQ counts and affinity | `/proc/interrupts`, `/proc/irq/*/smp_affinity_list`, `/sys/class/net/*/device/msi_irqs` | selected interface when discoverable |
 | Qdisc counters | `tc -s qdisc show dev <iface>` | selected interface |
 | TCP retransmit tracepoint count | eBPF `tcp_retransmit_skb` | host-wide |
-| TCP retransmit per-flow counters | eBPF `tcp_retransmit_skb` | bounded IPv4 flow tuples, host-wide source |
+| TCP retransmit per-flow counters | eBPF `tcp_retransmit_skb` | bounded IPv4 flow tuples, host-wide source, truncated by `--max-ebpf-flows` |
 | Host metadata | hostname, kernel release | host |
 
 The IRQ, qdisc and eBPF collectors are best-effort optional signals. If one of
@@ -135,6 +150,10 @@ The analyzer currently reports conservative counter-level findings:
 - cumulative counter resets during the capture;
 - network receive processing concentrated on a busy CPU.
 
+When eBPF per-flow retransmission data is available, TCP retransmission findings
+include the top IPv4 flow tuples as supporting evidence. If the serialized flow
+list was capped by `--max-ebpf-flows`, the finding also reports the truncation.
+
 Each finding includes:
 
 - severity;
@@ -156,6 +175,7 @@ Confidence: strong correlation
 Severity: warning
 Evidence: 153 retransmitted of 1101 outbound TCP segments (13.90%)
 Evidence: eBPF observed 161 tcp_retransmit_skb tracepoint events
+Evidence: Top retransmitting IPv4 flow: 127.0.0.1:43946 -> 127.0.0.1:40981 had 4 retransmits
 Next step: Check packet loss, ECN/congestion signals, peer health, and interface error counters.
 ```
 
@@ -308,7 +328,8 @@ targets.
 
 - The eBPF retransmit event count is host-wide. Bounded IPv4 per-flow
   retransmit counters are also collected, but they are not scoped to the
-  selected interface or process and do not include IPv6.
+  selected interface or process and do not include IPv6. Per-flow entries are
+  capped per sample by `--max-ebpf-flows`.
 - Procfs TCP counters are network-namespace scoped while the eBPF counter is
   host-wide, so their retransmission deltas need not match.
 - Counter correlation does not locate latency precisely inside the kernel path.

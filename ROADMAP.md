@@ -41,6 +41,8 @@ Completed:
 - Host-wide `tcp_retransmit_skb` tracepoint counter.
 - Bounded IPv4 per-flow `tcp_retransmit_skb` counters with root-enabled
   integration coverage.
+- Per-sample eBPF retransmit-flow serialization limit with visible flow count
+  and truncation metadata.
 - Graceful optional-collector fallback when BPF, IRQ or qdisc collection is
   unavailable.
 - Unit coverage for current parsing and analysis rules.
@@ -60,7 +62,8 @@ Current limitations:
 
 - The eBPF retransmit event count is host-wide. Bounded IPv4 per-flow
   retransmit counters are available, but they are not scoped to the selected
-  interface or process and do not include IPv6.
+  interface or process and do not include IPv6. Serialized per-flow entries are
+  capped by `--max-ebpf-flows` per sample.
 - Counter correlation cannot locate latency within the kernel path.
 - Procfs TCP counters are network-namespace scoped while the eBPF counter is
   host-wide, so their retransmission deltas need not match.
@@ -158,6 +161,7 @@ Implemented:
 - [x] Bounded IPv4 per-flow retransmission counters from `tcp_retransmit_skb`.
 - [x] Root integration test verifies a controlled retransmission produces both
   a host-wide eBPF event increase and a loopback per-flow entry.
+- [x] Per-sample serialization budget for eBPF retransmit flows.
 
 Remaining:
 
@@ -166,7 +170,8 @@ Remaining:
 - Track connect latency, RTT, congestion state and socket queues.
 - Measure wakeup-to-run delay for selected service processes.
 - Correlate flow events without retaining payloads.
-- Add capture budgets, sampling and cardinality controls.
+- Add broader capture budgets, sampling and cardinality controls for future
+  eBPF event types.
 
 Exit criterion: explain a TCP tail-latency regression in a reproducible test
 without requiring an expert to inspect raw traces.

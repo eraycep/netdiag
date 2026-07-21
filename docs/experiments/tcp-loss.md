@@ -48,9 +48,15 @@ In the recording, compare the first and last samples:
 - `tcp.retransmits` should increase as lost host-side packets are retransmitted.
 - `ebpf.tcp_retransmit_events` should increase when eBPF loaded successfully.
 - `ebpf.tcp_retransmit_flows` should include bounded IPv4 flow counters when
-  the retransmitting sockets are IPv4.
+  the retransmitting sockets are IPv4 and `--max-ebpf-flows` is greater than
+  zero.
+- `ebpf.tcp_retransmit_flow_count` reports how many IPv4 flow entries were
+  observed in the eBPF map at sample time.
+- `ebpf.tcp_retransmit_flows_truncated` is true when only the top
+  `--max-ebpf-flows` entries were serialized.
 - Analysis should normally report elevated TCP retransmissions with strong
-  correlation.
+  correlation. When per-flow eBPF data is available, the finding should include
+  top IPv4 retransmitting flow evidence.
 
 The procfs retransmission delta and eBPF event delta need not be equal. Procfs
 is scoped to the host network namespace, while the current eBPF program observes

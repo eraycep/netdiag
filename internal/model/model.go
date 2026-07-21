@@ -130,8 +130,10 @@ type InterfaceStats struct {
 }
 
 type EBPFStats struct {
-	TCPRetransmitEvents uint64              `json:"tcp_retransmit_events"`
-	TCPRetransmitFlows  []TCPRetransmitFlow `json:"tcp_retransmit_flows,omitempty"`
+	TCPRetransmitEvents         uint64              `json:"tcp_retransmit_events"`
+	TCPRetransmitFlows          []TCPRetransmitFlow `json:"tcp_retransmit_flows,omitempty"`
+	TCPRetransmitFlowsTruncated bool                `json:"tcp_retransmit_flows_truncated,omitempty"`
+	TCPRetransmitFlowCount      int                 `json:"tcp_retransmit_flow_count,omitempty"`
 }
 
 type TCPRetransmitFlow struct {

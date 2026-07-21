@@ -58,6 +58,7 @@ func record(args []string) error {
 	output := fs.String("output", "capture.json", "output recording")
 	useEBPF := fs.Bool("ebpf", true, "collect TCP retransmit tracepoint events when permitted")
 	maxSamples := fs.Int("max-samples", 3600, "maximum samples")
+	maxEBPFFlows := fs.Int("max-ebpf-flows", 128, "maximum eBPF per-flow entries to store per sample")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -83,6 +84,10 @@ func record(args []string) error {
 
 	if *maxSamples < 1 {
 		return errors.New("max samples must be positive")
+	}
+
+	if *maxEBPFFlows < 0 {
+		return errors.New("max ebpf flows must be non-negative")
 	}
 
 	var bpfCollector *ebpfcollector.Collector
@@ -144,7 +149,7 @@ func record(args []string) error {
 		sampledAt := time.Now()
 
 		if bpfCollector != nil {
-			stats, err := bpfCollector.Sample()
+			stats, err := bpfCollector.Sample(*maxEBPFFlows)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "netdiag: eBPF sampling failed; disabling collector: %v\n", err)
 				if updateErr := updateCollectorStatus(r.Collectors, "ebpf_tcp_retransmit", model.CollectorUnavailable, err.Error()); updateErr != nil {

@@ -48,6 +48,7 @@ func Analyze(r model.Recording) ([]Finding, error) {
 			if !resets.ebpf && first.EBPF != nil && last.EBPF != nil {
 				events := delta(last.EBPF.TCPRetransmitEvents, first.EBPF.TCPRetransmitEvents)
 				evidence = append(evidence, fmt.Sprintf("eBPF observed %d tcp_retransmit_skb tracepoint events", events))
+				evidence = append(evidence, tcpRetransmitFlowEvidence(last.EBPF)...)
 			}
 			findings = append(findings, Finding{
 				Severity: "warning", Confidence: "strong correlation",
@@ -88,6 +89,36 @@ func Analyze(r model.Recording) ([]Finding, error) {
 		})
 	}
 	return findings, nil
+}
+
+func tcpRetransmitFlowEvidence(stats *model.EBPFStats) []string {
+	if stats == nil || len(stats.TCPRetransmitFlows) == 0 {
+		return nil
+	}
+
+	limit := len(stats.TCPRetransmitFlows)
+	if limit > 3 {
+		limit = 3
+	}
+	evidence := make([]string, 0, limit+1)
+	for _, flow := range stats.TCPRetransmitFlows[:limit] {
+		evidence = append(evidence, fmt.Sprintf(
+			"Top retransmitting IPv4 flow: %s:%d -> %s:%d had %d retransmits",
+			flow.SourceAddress,
+			flow.SourcePort,
+			flow.DestinationAddress,
+			flow.DestinationPort,
+			flow.Retransmits,
+		))
+	}
+	if stats.TCPRetransmitFlowsTruncated {
+		evidence = append(evidence, fmt.Sprintf(
+			"eBPF flow list truncated: showing %d of %d observed flow entries",
+			len(stats.TCPRetransmitFlows),
+			stats.TCPRetransmitFlowCount,
+		))
+	}
+	return evidence
 }
 
 func analyzeQdiscDrops(first, last model.Sample) (Finding, bool) {

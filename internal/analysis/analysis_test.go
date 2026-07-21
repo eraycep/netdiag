@@ -29,6 +29,71 @@ func TestAnalyzeRetransmissions(t *testing.T) {
 	}
 }
 
+func TestAnalyzeRetransmissionsIncludesTopEBPFFlows(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second), TCP: model.TCPStats{OutSegments: 1000, Retransmits: 10}, EBPF: &model.EBPFStats{TCPRetransmitEvents: 5}},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			TCP:          model.TCPStats{OutSegments: 2000, Retransmits: 40},
+			EBPF: &model.EBPFStats{
+				TCPRetransmitEvents: 35,
+				TCPRetransmitFlows: []model.TCPRetransmitFlow{
+					{SourceAddress: "127.0.0.1", DestinationAddress: "127.0.0.1", SourcePort: 43946, DestinationPort: 40981, Retransmits: 4},
+					{SourceAddress: "10.0.0.2", DestinationAddress: "10.0.0.1", SourcePort: 53000, DestinationPort: 443, Retransmits: 2},
+				},
+				TCPRetransmitFlowCount: 2,
+			},
+		},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	for _, want := range []string{
+		"Top retransmitting IPv4 flow: 127.0.0.1:43946 -> 127.0.0.1:40981 had 4 retransmits",
+		"Top retransmitting IPv4 flow: 10.0.0.2:53000 -> 10.0.0.1:443 had 2 retransmits",
+	} {
+		if !strings.Contains(evidence, want) {
+			t.Fatalf("missing flow evidence %q: %s", want, evidence)
+		}
+	}
+}
+
+func TestAnalyzeRetransmissionsIncludesFlowTruncationEvidence(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second), TCP: model.TCPStats{OutSegments: 1000, Retransmits: 10}, EBPF: &model.EBPFStats{TCPRetransmitEvents: 5}},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			TCP:          model.TCPStats{OutSegments: 2000, Retransmits: 40},
+			EBPF: &model.EBPFStats{
+				TCPRetransmitEvents: 35,
+				TCPRetransmitFlows: []model.TCPRetransmitFlow{
+					{SourceAddress: "10.0.0.1", DestinationAddress: "10.0.0.2", SourcePort: 1000, DestinationPort: 80, Retransmits: 9},
+					{SourceAddress: "10.0.0.2", DestinationAddress: "10.0.0.3", SourcePort: 1001, DestinationPort: 80, Retransmits: 8},
+					{SourceAddress: "10.0.0.3", DestinationAddress: "10.0.0.4", SourcePort: 1002, DestinationPort: 80, Retransmits: 7},
+				},
+				TCPRetransmitFlowCount:      12,
+				TCPRetransmitFlowsTruncated: true,
+			},
+		},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	if !strings.Contains(evidence, "eBPF flow list truncated: showing 3 of 12 observed flow entries") {
+		t.Fatalf("missing truncation evidence: %s", evidence)
+	}
+}
+
 func TestAnalyzeRejectsShortRecording(t *testing.T) {
 	_, err := Analyze(model.Recording{Version: model.FormatVersion, Samples: []model.Sample{{}}})
 	if err == nil {

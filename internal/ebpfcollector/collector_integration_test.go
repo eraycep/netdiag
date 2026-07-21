@@ -34,7 +34,7 @@ func TestTCPRetransmitIntegration(t *testing.T) {
 	}
 	defer collector.Close()
 
-	before, err := collector.Sample()
+	before, err := collector.Sample(128)
 	if err != nil {
 		t.Fatalf("sample eBPF counter before experiment: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestTCPRetransmitIntegration(t *testing.T) {
 		t.Fatalf("run isolated retransmission experiment: %v\n%s", err, output)
 	}
 
-	after, err := collector.Sample()
+	after, err := collector.Sample(128)
 	if err != nil {
 		t.Fatalf("sample eBPF counter after experiment: %v", err)
 	}

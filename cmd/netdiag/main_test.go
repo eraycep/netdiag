@@ -150,6 +150,17 @@ func TestRecordRejectsInvalidMaximumSampleCount(t *testing.T) {
 	}
 }
 
+func TestRecordRejectsInvalidMaximumEBPFFlowCount(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "capture.json")
+	err := record([]string{"--max-ebpf-flows=-1", "--ebpf=false", "--output=" + path})
+	if err == nil || !strings.Contains(err.Error(), "max ebpf flows must be non-negative") {
+		t.Fatalf("error = %v, want maximum eBPF flow validation error", err)
+	}
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("output was created for invalid configuration: %v", statErr)
+	}
+}
+
 func TestRecordContinuesWhenQdiscUnavailable(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	path := filepath.Join(t.TempDir(), "capture.json")

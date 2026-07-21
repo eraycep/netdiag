@@ -32,7 +32,7 @@ func New() (*Collector, error) {
 	return &Collector{objects: objects, link: tracepoint}, nil
 }
 
-func (c *Collector) Sample() (model.EBPFStats, error) {
+func (c *Collector) Sample(maxFlows int) (model.EBPFStats, error) {
 	if c == nil {
 		return model.EBPFStats{}, errors.New("eBPF collector is not initialized")
 	}
@@ -41,6 +41,9 @@ func (c *Collector) Sample() (model.EBPFStats, error) {
 	if err := c.objects.RetransmitCount.Lookup(&key, &count); err != nil {
 		return model.EBPFStats{}, fmt.Errorf("read retransmit counter: %w", err)
 	}
+	if maxFlows < 0 {
+		return model.EBPFStats{}, errors.New("max flows must be non-negative")
+	}
 
 	flows, err := c.TCPRetransmitFlows()
 	if err != nil {
@@ -48,8 +51,9 @@ func (c *Collector) Sample() (model.EBPFStats, error) {
 		// available if the flow map cannot be read.
 		return model.EBPFStats{TCPRetransmitEvents: count}, nil
 	}
+	limitedFlows, flowCount, truncated := limitRetransmitFlows(flows, maxFlows)
 
-	return model.EBPFStats{TCPRetransmitEvents: count, TCPRetransmitFlows: flows}, nil
+	return model.EBPFStats{TCPRetransmitEvents: count, TCPRetransmitFlows: limitedFlows, TCPRetransmitFlowsTruncated: truncated, TCPRetransmitFlowCount: flowCount}, nil
 }
 
 func (c *Collector) Close() error {
@@ -114,4 +118,15 @@ func sortRetransmitFlows(flows []model.TCPRetransmitFlow) {
 		}
 		return flows[i].DestinationPort < flows[j].DestinationPort
 	})
+}
+
+func limitRetransmitFlows(flows []model.TCPRetransmitFlow, max int) ([]model.TCPRetransmitFlow, int, bool) {
+	count := len(flows)
+	if max >= count {
+		return flows, count, false
+	}
+	if max == 0 {
+		return nil, count, count > 0
+	}
+	return flows[:max], count, true
 }

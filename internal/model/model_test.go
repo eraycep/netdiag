@@ -45,7 +45,9 @@ func TestCollectorManifestJSONRoundTrip(t *testing.T) {
 
 func TestEBPFStatsJSONIncludesRetransmitFlows(t *testing.T) {
 	want := EBPFStats{
-		TCPRetransmitEvents: 9,
+		TCPRetransmitEvents:         9,
+		TCPRetransmitFlowCount:      2,
+		TCPRetransmitFlowsTruncated: true,
 		TCPRetransmitFlows: []TCPRetransmitFlow{
 			{
 				SourceAddress:      "127.0.0.1",
@@ -63,7 +65,9 @@ func TestEBPFStatsJSONIncludesRetransmitFlows(t *testing.T) {
 	}
 	for _, field := range []string{
 		"tcp_retransmit_events",
+		"tcp_retransmit_flow_count",
 		"tcp_retransmit_flows",
+		"tcp_retransmit_flows_truncated",
 		"source_address",
 		"destination_address",
 		"source_port",
@@ -80,6 +84,8 @@ func TestEBPFStatsJSONIncludesRetransmitFlows(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.TCPRetransmitEvents != want.TCPRetransmitEvents ||
+		got.TCPRetransmitFlowCount != want.TCPRetransmitFlowCount ||
+		got.TCPRetransmitFlowsTruncated != want.TCPRetransmitFlowsTruncated ||
 		len(got.TCPRetransmitFlows) != 1 ||
 		got.TCPRetransmitFlows[0] != want.TCPRetransmitFlows[0] {
 		t.Fatalf("round trip mismatch: got %+v, want %+v", got, want)
