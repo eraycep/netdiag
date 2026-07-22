@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/eray/netdiag/internal/model"
@@ -162,9 +163,11 @@ func findingSummarySet(findings []Finding) map[string]struct{} {
 func compareKeyDeltas(baseline, incident model.Recording) []KeyDeltaChange {
 	baselineReceiveCPU := receiveCPUDeltaDisplay(baseline)
 	incidentReceiveCPU := receiveCPUDeltaDisplay(incident)
+	retransmitFlows := retransmitFlowDeltaDisplay(baseline, incident)
 
 	return []KeyDeltaChange{
 		{Name: "TCP retransmits", BaselineDisplay: tcpRetransmitDeltaDisplay(baseline), IncidentDisplay: tcpRetransmitDeltaDisplay(incident)},
+		{Name: "top eBPF retransmit flows", BaselineDisplay: retransmitFlows.baseline, IncidentDisplay: retransmitFlows.incident},
 		{Name: "top NET_RX softirq CPU", BaselineDisplay: baselineReceiveCPU.softirq, IncidentDisplay: incidentReceiveCPU.softirq},
 		{Name: "top NET_RX CPU busy", BaselineDisplay: baselineReceiveCPU.busy, IncidentDisplay: incidentReceiveCPU.busy},
 		{Name: "qdisc drops", BaselineDisplay: uintDeltaDisplay(qdiscDropsDelta(baseline)), IncidentDisplay: uintDeltaDisplay(qdiscDropsDelta(incident))},
@@ -172,6 +175,149 @@ func compareKeyDeltas(baseline, incident model.Recording) []KeyDeltaChange {
 		{Name: "interface drops", BaselineDisplay: uintDeltaDisplay(interfaceDropsDelta(baseline)), IncidentDisplay: uintDeltaDisplay(interfaceDropsDelta(incident))},
 		{Name: "interface errors", BaselineDisplay: uintDeltaDisplay(interfaceErrorsDelta(baseline)), IncidentDisplay: uintDeltaDisplay(interfaceErrorsDelta(incident))},
 	}
+}
+
+type retransmitFlowComparisonDisplay struct {
+	baseline string
+	incident string
+}
+
+type retransmitFlowKey struct {
+	sourceAddress      string
+	destinationAddress string
+	sourcePort         uint16
+	destinationPort    uint16
+}
+
+func retransmitFlowDeltaDisplay(baseline, incident model.Recording) retransmitFlowComparisonDisplay {
+	baselineStats, baselineOK := lastEBPFStats(baseline)
+	incidentStats, incidentOK := lastEBPFStats(incident)
+
+	keys := retransmitFlowComparisonKeys(baselineStats, baselineOK, incidentStats, incidentOK, 3)
+
+	return retransmitFlowComparisonDisplay{
+		baseline: retransmitFlowSideDisplay("baseline", baselineStats, baselineOK, keys),
+		incident: retransmitFlowSideDisplay("incident", incidentStats, incidentOK, keys),
+	}
+}
+
+func lastEBPFStats(r model.Recording) (*model.EBPFStats, bool) {
+	if len(r.Samples) == 0 {
+		return nil, false
+	}
+	stats := r.Samples[len(r.Samples)-1].EBPF
+	if stats == nil {
+		return nil, false
+	}
+	return stats, true
+}
+
+func retransmitFlowComparisonKeys(baseline *model.EBPFStats, baselineOK bool, incident *model.EBPFStats, incidentOK bool, limit int) []retransmitFlowKey {
+	if limit <= 0 {
+		return nil
+	}
+	incidentFlows := sortedRetransmitFlowsForCompare(incident, incidentOK)
+	if len(incidentFlows) > 0 {
+		return retransmitFlowKeys(incidentFlows, limit)
+	}
+	baselineFlows := sortedRetransmitFlowsForCompare(baseline, baselineOK)
+	return retransmitFlowKeys(baselineFlows, limit)
+}
+
+func sortedRetransmitFlowsForCompare(stats *model.EBPFStats, ok bool) []model.TCPRetransmitFlow {
+	if !ok || stats == nil || len(stats.TCPRetransmitFlows) == 0 {
+		return nil
+	}
+	flows := append([]model.TCPRetransmitFlow(nil), stats.TCPRetransmitFlows...)
+	sort.Slice(flows, func(i, j int) bool {
+		if flows[i].Retransmits != flows[j].Retransmits {
+			return flows[i].Retransmits > flows[j].Retransmits
+		}
+		return retransmitFlowKeyLess(retransmitFlowKeyFromFlow(flows[i]), retransmitFlowKeyFromFlow(flows[j]))
+	})
+	return flows
+}
+
+func retransmitFlowKeys(flows []model.TCPRetransmitFlow, limit int) []retransmitFlowKey {
+	if len(flows) < limit {
+		limit = len(flows)
+	}
+	keys := make([]retransmitFlowKey, 0, limit)
+	seen := make(map[retransmitFlowKey]struct{}, limit)
+	for _, flow := range flows {
+		key := retransmitFlowKeyFromFlow(flow)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+		if len(keys) == limit {
+			break
+		}
+	}
+	return keys
+}
+
+func retransmitFlowSideDisplay(label string, stats *model.EBPFStats, ok bool, keys []retransmitFlowKey) string {
+	if !ok || stats == nil {
+		return "unavailable"
+	}
+
+	counts := retransmitFlowCountByKey(stats.TCPRetransmitFlows)
+	var parts []string
+	for _, key := range keys {
+		count, ok := counts[key]
+		if !ok {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s had %d retransmits", formatRetransmitFlowKey(key), count))
+	}
+	display := "none"
+	if len(parts) > 0 {
+		display = strings.Join(parts, "; ")
+	}
+	if stats.TCPRetransmitFlowsTruncated {
+		total := stats.TCPRetransmitFlowCount
+		if total == 0 {
+			total = len(stats.TCPRetransmitFlows)
+		}
+		display += fmt.Sprintf("; %s eBPF flow list truncated: showing %d of %d observed flow entries", label, len(stats.TCPRetransmitFlows), total)
+	}
+	return display
+}
+
+func retransmitFlowCountByKey(flows []model.TCPRetransmitFlow) map[retransmitFlowKey]uint64 {
+	counts := make(map[retransmitFlowKey]uint64, len(flows))
+	for _, flow := range flows {
+		counts[retransmitFlowKeyFromFlow(flow)] += flow.Retransmits
+	}
+	return counts
+}
+
+func retransmitFlowKeyFromFlow(flow model.TCPRetransmitFlow) retransmitFlowKey {
+	return retransmitFlowKey{
+		sourceAddress:      flow.SourceAddress,
+		destinationAddress: flow.DestinationAddress,
+		sourcePort:         flow.SourcePort,
+		destinationPort:    flow.DestinationPort,
+	}
+}
+
+func retransmitFlowKeyLess(left, right retransmitFlowKey) bool {
+	if left.sourceAddress != right.sourceAddress {
+		return left.sourceAddress < right.sourceAddress
+	}
+	if left.sourcePort != right.sourcePort {
+		return left.sourcePort < right.sourcePort
+	}
+	if left.destinationAddress != right.destinationAddress {
+		return left.destinationAddress < right.destinationAddress
+	}
+	return left.destinationPort < right.destinationPort
+}
+
+func formatRetransmitFlowKey(key retransmitFlowKey) string {
+	return fmt.Sprintf("%s:%d -> %s:%d", key.sourceAddress, key.sourcePort, key.destinationAddress, key.destinationPort)
 }
 
 type receiveCPUDisplay struct {

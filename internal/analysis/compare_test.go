@@ -96,6 +96,98 @@ func TestCompareReportsReceiveCPUSignalChanges(t *testing.T) {
 	}
 }
 
+func TestCompareReportsIncidentOnlyRetransmitFlow(t *testing.T) {
+	baseline := comparisonFlowRecording(nil, false, 0)
+	incident := comparisonFlowRecording([]model.TCPRetransmitFlow{
+		{
+			SourceAddress:      "127.0.0.1",
+			DestinationAddress: "127.0.0.1",
+			SourcePort:         43946,
+			DestinationPort:    40981,
+			Retransmits:        4,
+		},
+	}, false, 1)
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	want := "- top eBPF retransmit flows: none -> 127.0.0.1:43946 -> 127.0.0.1:40981 had 4 retransmits"
+	if !strings.Contains(rendered, want) {
+		t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+	}
+}
+
+func TestCompareReportsSharedRetransmitFlowDelta(t *testing.T) {
+	baseline := comparisonFlowRecording([]model.TCPRetransmitFlow{
+		{
+			SourceAddress:      "10.0.0.2",
+			DestinationAddress: "10.0.0.1",
+			SourcePort:         53000,
+			DestinationPort:    443,
+			Retransmits:        1,
+		},
+	}, false, 1)
+	incident := comparisonFlowRecording([]model.TCPRetransmitFlow{
+		{
+			SourceAddress:      "10.0.0.2",
+			DestinationAddress: "10.0.0.1",
+			SourcePort:         53000,
+			DestinationPort:    443,
+			Retransmits:        7,
+		},
+	}, false, 1)
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	want := "- top eBPF retransmit flows: 10.0.0.2:53000 -> 10.0.0.1:443 had 1 retransmits -> 10.0.0.2:53000 -> 10.0.0.1:443 had 7 retransmits"
+	if !strings.Contains(rendered, want) {
+		t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+	}
+}
+
+func TestCompareReportsRetransmitFlowTruncation(t *testing.T) {
+	baseline := comparisonFlowRecording(nil, false, 0)
+	incident := comparisonFlowRecording([]model.TCPRetransmitFlow{
+		{SourceAddress: "10.0.0.2", DestinationAddress: "10.0.0.1", SourcePort: 53000, DestinationPort: 443, Retransmits: 7},
+		{SourceAddress: "10.0.0.3", DestinationAddress: "10.0.0.1", SourcePort: 53001, DestinationPort: 443, Retransmits: 5},
+		{SourceAddress: "10.0.0.4", DestinationAddress: "10.0.0.1", SourcePort: 53002, DestinationPort: 443, Retransmits: 3},
+	}, true, 128)
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	want := "incident eBPF flow list truncated: showing 3 of 128 observed flow entries"
+	if !strings.Contains(rendered, want) {
+		t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+	}
+}
+
+func TestCompareRetransmitFlowDisplayUnavailableAndNone(t *testing.T) {
+	baseline := comparisonNoEBPFRecording()
+	incident := comparisonFlowRecording(nil, false, 0)
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	want := "- top eBPF retransmit flows: unavailable -> none"
+	if !strings.Contains(rendered, want) {
+		t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+	}
+}
+
 func TestReceiveCPUDeltaDisplayHandlesMissingCPUStats(t *testing.T) {
 	r := receiveCPUComparisonRecording(
 		[]model.SoftIRQCPUStats{{CPU: 0, NetRX: 100}, {CPU: 1, NetRX: 100}},
@@ -148,6 +240,34 @@ func receiveCPUComparisonRecording(firstSoftIRQ, lastSoftIRQ []model.SoftIRQCPUS
 			SoftIRQ:      model.SoftIRQStats{CPUs: lastSoftIRQ},
 			CPU:          model.CPUStats{CPUs: lastCPU},
 		},
+	}}
+}
+
+func comparisonFlowRecording(flows []model.TCPRetransmitFlow, truncated bool, flowCount int) model.Recording {
+	now := time.Now()
+	return model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{
+			Timestamp:    now,
+			ElapsedNanos: int64(time.Second),
+			EBPF:         &model.EBPFStats{},
+		},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			EBPF: &model.EBPFStats{
+				TCPRetransmitFlows:          flows,
+				TCPRetransmitFlowsTruncated: truncated,
+				TCPRetransmitFlowCount:      flowCount,
+			},
+		},
+	}}
+}
+
+func comparisonNoEBPFRecording() model.Recording {
+	now := time.Now()
+	return model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second)},
+		{Timestamp: now.Add(time.Second), ElapsedNanos: int64(2 * time.Second)},
 	}}
 }
 
