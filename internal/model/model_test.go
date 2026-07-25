@@ -91,3 +91,59 @@ func TestEBPFStatsJSONIncludesRetransmitFlows(t *testing.T) {
 		t.Fatalf("round trip mismatch: got %+v, want %+v", got, want)
 	}
 }
+
+func TestEBPFFeatureStatusJSONOmitsEmptyReason(t *testing.T) {
+	feature := EBPFFeatureStatus{
+		Name:            "tcp_retransmit_events",
+		Status:          CollectorEnabled,
+		VisibilityScope: "host-wide TCP retransmission events",
+	}
+
+	data, err := json.Marshal(feature)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "reason") {
+		t.Fatalf("empty feature reason was serialized: %s", data)
+	}
+	if !strings.Contains(string(data), `"status":"enabled"`) {
+		t.Fatalf("feature status was not serialized as collector status: %s", data)
+	}
+}
+
+func TestRecordingJSONIncludesEBPFFeatures(t *testing.T) {
+	recording := Recording{
+		Version: FormatVersion,
+		EBPFFeatures: []EBPFFeatureStatus{
+			{
+				Name:            "tcp_retransmit_ipv4_flows",
+				Status:          CollectorUnavailable,
+				VisibilityScope: "bounded IPv4 TCP retransmission flow counters",
+				Reason:          "permission denied",
+			},
+		},
+	}
+
+	data, err := json.Marshal(recording)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{
+		"ebpf_features",
+		"tcp_retransmit_ipv4_flows",
+		"unavailable",
+		"permission denied",
+	} {
+		if !strings.Contains(string(data), field) {
+			t.Fatalf("serialized recording missing %q: %s", field, data)
+		}
+	}
+
+	var got Recording
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.EBPFFeatures) != 1 || got.EBPFFeatures[0] != recording.EBPFFeatures[0] {
+		t.Fatalf("round trip mismatch: got %+v, want %+v", got.EBPFFeatures, recording.EBPFFeatures)
+	}
+}

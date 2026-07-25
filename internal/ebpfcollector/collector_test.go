@@ -113,3 +113,37 @@ func TestLimitRetransmitFlowsZeroEmptyInput(t *testing.T) {
 		t.Fatalf("limit empty = (%+v, %d, %v), want (nil, 0, false)", gotFlows, gotCount, gotTruncated)
 	}
 }
+
+func TestFeatureStatusHelpersReturnFreshStatuses(t *testing.T) {
+	enabled := EnabledFeatures()
+	unavailable := UnavailableFeatures("permission denied")
+	disabled := DisabledFeatures()
+
+	if len(enabled) != 2 || len(unavailable) != 2 || len(disabled) != 2 {
+		t.Fatalf("feature counts = enabled %d unavailable %d disabled %d, want all 2", len(enabled), len(unavailable), len(disabled))
+	}
+
+	for _, feature := range enabled {
+		if feature.Status != model.CollectorEnabled || feature.Reason != "" {
+			t.Fatalf("enabled feature = %+v, want enabled without reason", feature)
+		}
+		if feature.Name == "" || feature.VisibilityScope == "" {
+			t.Fatalf("enabled feature missing identity or scope: %+v", feature)
+		}
+	}
+	for _, feature := range unavailable {
+		if feature.Status != model.CollectorUnavailable || feature.Reason != "permission denied" {
+			t.Fatalf("unavailable feature = %+v, want unavailable with reason", feature)
+		}
+	}
+	for _, feature := range disabled {
+		if feature.Status != model.CollectorDisabled || feature.Reason != "" {
+			t.Fatalf("disabled feature = %+v, want disabled without reason", feature)
+		}
+	}
+
+	enabled[0].Status = model.CollectorUnavailable
+	if got := EnabledFeatures()[0].Status; got != model.CollectorEnabled {
+		t.Fatalf("feature helper leaked mutable state: got %q, want %q", got, model.CollectorEnabled)
+	}
+}

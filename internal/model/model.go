@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-const FormatVersion = 8
+const FormatVersion = 9
 
 type CollectorStatus string
 
@@ -13,13 +13,14 @@ const (
 )
 
 type Recording struct {
-	Version    int                 `json:"version"`
-	StartedAt  time.Time           `json:"started_at"`
-	EndedAt    time.Time           `json:"ended_at"`
-	Host       Host                `json:"host"`
-	Interface  string              `json:"interface,omitempty"`
-	Samples    []Sample            `json:"samples"`
-	Collectors []CollectorManifest `json:"collectors"`
+	Version      int                 `json:"version"`
+	StartedAt    time.Time           `json:"started_at"`
+	EndedAt      time.Time           `json:"ended_at"`
+	Host         Host                `json:"host"`
+	Interface    string              `json:"interface,omitempty"`
+	Samples      []Sample            `json:"samples"`
+	Collectors   []CollectorManifest `json:"collectors"`
+	EBPFFeatures []EBPFFeatureStatus `json:"ebpf_features,omitempty"`
 }
 
 type Host struct {
@@ -134,6 +135,13 @@ type EBPFStats struct {
 	TCPRetransmitFlows          []TCPRetransmitFlow `json:"tcp_retransmit_flows,omitempty"`
 	TCPRetransmitFlowsTruncated bool                `json:"tcp_retransmit_flows_truncated,omitempty"`
 	TCPRetransmitFlowCount      int                 `json:"tcp_retransmit_flow_count,omitempty"`
+}
+
+type EBPFFeatureStatus struct {
+	Name            string          `json:"name"`
+	Status          CollectorStatus `json:"status"`
+	Reason          string          `json:"reason,omitempty"`
+	VisibilityScope string          `json:"visibility_scope"`
 }
 
 type TCPRetransmitFlow struct {

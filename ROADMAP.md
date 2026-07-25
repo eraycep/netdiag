@@ -43,6 +43,8 @@ Completed:
   integration coverage.
 - Per-sample eBPF retransmit-flow serialization limit with visible flow count
   and truncation metadata.
+- Recording-level eBPF feature visibility metadata for enabled, disabled and
+  unavailable eBPF signals.
 - Graceful optional-collector fallback when BPF, IRQ or qdisc collection is
   unavailable.
 - Unit coverage for current parsing and analysis rules.

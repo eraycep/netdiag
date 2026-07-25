@@ -126,7 +126,10 @@ were serialized.
 
 The IRQ, qdisc and eBPF collectors are best-effort optional signals. If one of
 them is unavailable, `netdiag` records the failure in the collector manifest and
-continues capturing required counters.
+continues capturing required counters. eBPF recordings also include an
+`ebpf_features` section so individual eBPF signals can report `enabled`,
+`disabled` or `unavailable` as the collector grows beyond the initial
+all-or-nothing retransmit tracepoint object.
 
 Required collectors:
 

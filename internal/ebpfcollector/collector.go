@@ -17,6 +17,17 @@ type Collector struct {
 	link    link.Link
 }
 
+var featureDefinitions = []model.EBPFFeatureStatus{
+	{
+		Name:            "tcp_retransmit_events",
+		VisibilityScope: "host-wide TCP retransmission events",
+	},
+	{
+		Name:            "tcp_retransmit_ipv4_flows",
+		VisibilityScope: "bounded IPv4 TCP retransmission flow counters",
+	},
+}
+
 func New() (*Collector, error) {
 	var objects tcpRetransmitObjects
 	if err := loadTcpRetransmitObjects(&objects, nil); err != nil {
@@ -129,4 +140,26 @@ func limitRetransmitFlows(flows []model.TCPRetransmitFlow, max int) ([]model.TCP
 		return nil, count, count > 0
 	}
 	return flows[:max], count, true
+}
+
+func EnabledFeatures() []model.EBPFFeatureStatus {
+	return featuresWithStatus(model.CollectorEnabled, "")
+}
+
+func UnavailableFeatures(reason string) []model.EBPFFeatureStatus {
+	return featuresWithStatus(model.CollectorUnavailable, reason)
+}
+
+func DisabledFeatures() []model.EBPFFeatureStatus {
+	return featuresWithStatus(model.CollectorDisabled, "")
+}
+
+func featuresWithStatus(status model.CollectorStatus, reason string) []model.EBPFFeatureStatus {
+	features := make([]model.EBPFFeatureStatus, len(featureDefinitions))
+	for i, feature := range featureDefinitions {
+		feature.Status = status
+		feature.Reason = reason
+		features[i] = feature
+	}
+	return features
 }

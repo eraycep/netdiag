@@ -79,6 +79,11 @@ func record(args []string) error {
 	r := model.Recording{Version: model.FormatVersion, StartedAt: captureStart.UTC(),
 		Interface: *iface, Host: model.Host{Hostname: hostname, Kernel: kernel},
 		Collectors: buildCollectorManifest(*iface, *useEBPF)}
+	if *useEBPF {
+		r.EBPFFeatures = ebpfcollector.UnavailableFeatures("collector was not initialized")
+	} else {
+		r.EBPFFeatures = ebpfcollector.DisabledFeatures()
+	}
 
 	c := collect.New()
 
@@ -98,8 +103,10 @@ func record(args []string) error {
 			if updateErr := updateCollectorStatus(r.Collectors, "ebpf_tcp_retransmit", model.CollectorUnavailable, err.Error()); updateErr != nil {
 				return updateErr
 			}
+			r.EBPFFeatures = ebpfcollector.UnavailableFeatures(err.Error())
 			fmt.Fprintf(os.Stderr, "netdiag: eBPF unavailable; continuing with host counters: %v\n", err)
 		} else {
+			r.EBPFFeatures = ebpfcollector.EnabledFeatures()
 			defer bpfCollector.Close()
 		}
 	}
@@ -155,6 +162,7 @@ func record(args []string) error {
 				if updateErr := updateCollectorStatus(r.Collectors, "ebpf_tcp_retransmit", model.CollectorUnavailable, err.Error()); updateErr != nil {
 					return updateErr
 				}
+				r.EBPFFeatures = ebpfcollector.UnavailableFeatures(err.Error())
 				_ = bpfCollector.Close()
 				bpfCollector = nil
 			} else {

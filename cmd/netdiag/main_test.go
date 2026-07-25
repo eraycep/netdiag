@@ -108,6 +108,17 @@ func TestRecordStopsAtMaximumSampleCount(t *testing.T) {
 	if recording.Samples[0].ElapsedNanos < 0 {
 		t.Fatalf("elapsed time = %d, want a nonnegative value", recording.Samples[0].ElapsedNanos)
 	}
+	if len(recording.EBPFFeatures) != 2 {
+		t.Fatalf("eBPF feature count = %d, want 2", len(recording.EBPFFeatures))
+	}
+	for _, feature := range recording.EBPFFeatures {
+		if feature.Status != model.CollectorDisabled {
+			t.Fatalf("eBPF feature %s status = %q, want %q", feature.Name, feature.Status, model.CollectorDisabled)
+		}
+		if feature.VisibilityScope == "" {
+			t.Fatalf("eBPF feature %s has no visibility scope", feature.Name)
+		}
+	}
 }
 
 func TestRecordElapsedTimeIncreases(t *testing.T) {
