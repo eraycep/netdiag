@@ -47,9 +47,15 @@ func Analyze(r model.Recording) ([]Finding, error) {
 			evidence := []string{fmt.Sprintf("%d retransmitted of %d outbound TCP segments (%.2f%%)", retrans, out, ratio*100)}
 			if !resets.ebpf && first.EBPF != nil && last.EBPF != nil {
 				events := delta(last.EBPF.TCPRetransmitEvents, first.EBPF.TCPRetransmitEvents)
-				evidence = append(evidence, fmt.Sprintf("eBPF observed %d tcp_retransmit_skb tracepoint events", events))
+				feature, found := findEBPFFeature(r, "tcp_retransmit_events")
+				if !found || feature.Status == model.CollectorEnabled {
+					evidence = append(evidence, fmt.Sprintf("eBPF observed %d tcp_retransmit_skb tracepoint events", events))
+				}
+
 				evidence = append(evidence, tcpRetransmitFlowEvidence(last.EBPF)...)
 			}
+			evidence = append(evidence, ebpfFeatureVisibilityEvidence(r, "tcp_retransmit_events")...)
+			evidence = append(evidence, ebpfFeatureVisibilityEvidence(r, "tcp_retransmit_ipv4_flows")...)
 			findings = append(findings, Finding{
 				Severity: "warning", Confidence: "strong correlation",
 				Summary:  "TCP retransmissions were elevated during the capture",
@@ -119,6 +125,24 @@ func tcpRetransmitFlowEvidence(stats *model.EBPFStats) []string {
 		))
 	}
 	return evidence
+}
+
+func ebpfFeatureVisibilityEvidence(r model.Recording, name string) []string {
+	feature, ok := findEBPFFeature(r, name)
+	if !ok {
+		return nil
+	}
+	switch feature.Status {
+	case model.CollectorDisabled:
+		return []string{fmt.Sprintf("eBPF %s disabled", name)}
+	case model.CollectorUnavailable:
+		if feature.Reason != "" {
+			return []string{fmt.Sprintf("eBPF %s unavailable: %s", name, feature.Reason)}
+		}
+		return []string{fmt.Sprintf("eBPF %s unavailable", name)}
+	default:
+		return nil
+	}
 }
 
 func analyzeQdiscDrops(first, last model.Sample) (Finding, bool) {
@@ -581,4 +605,14 @@ func recordingDurationSeconds(r model.Recording) (float64, error) {
 
 func decreased(current, previous uint64) bool {
 	return current < previous
+}
+
+func findEBPFFeature(r model.Recording, featureName string) (model.EBPFFeatureStatus, bool) {
+	for _, feature := range r.EBPFFeatures {
+		if feature.Name == featureName {
+			return feature, true
+		}
+	}
+
+	return model.EBPFFeatureStatus{}, false
 }

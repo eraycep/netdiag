@@ -29,6 +29,115 @@ func TestAnalyzeRetransmissions(t *testing.T) {
 	}
 }
 
+func TestAnalyzeRetransmissionsWithEnabledEBPFFeatureMetadata(t *testing.T) {
+	r := retransmissionRecordingWithFeatures([]model.EBPFFeatureStatus{
+		{
+			Name:            "tcp_retransmit_events",
+			Status:          model.CollectorEnabled,
+			VisibilityScope: "host-wide TCP retransmission events",
+		},
+		{
+			Name:            "tcp_retransmit_ipv4_flows",
+			Status:          model.CollectorEnabled,
+			VisibilityScope: "bounded IPv4 TCP retransmission flow counters",
+		},
+	})
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	evidence := strings.Join(findings[0].Evidence, " ")
+	if !strings.Contains(evidence, "eBPF observed 30 tcp_retransmit_skb tracepoint events") {
+		t.Fatalf("missing eBPF event evidence: %s", evidence)
+	}
+	if strings.Contains(evidence, "unavailable") || strings.Contains(evidence, "disabled") {
+		t.Fatalf("unexpected feature visibility gap evidence: %s", evidence)
+	}
+}
+
+func TestAnalyzeRetransmissionsReportsUnavailableEBPFFeatures(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{
+		Version: model.FormatVersion,
+		EBPFFeatures: []model.EBPFFeatureStatus{
+			{
+				Name:            "tcp_retransmit_events",
+				Status:          model.CollectorUnavailable,
+				VisibilityScope: "host-wide TCP retransmission events",
+				Reason:          "load tcp retransmit programs: permission denied",
+			},
+			{
+				Name:            "tcp_retransmit_ipv4_flows",
+				Status:          model.CollectorUnavailable,
+				VisibilityScope: "bounded IPv4 TCP retransmission flow counters",
+				Reason:          "load tcp retransmit programs: permission denied",
+			},
+		},
+		Samples: []model.Sample{
+			{Timestamp: now, ElapsedNanos: int64(time.Second), TCP: model.TCPStats{OutSegments: 1000, Retransmits: 10}},
+			{Timestamp: now.Add(time.Second), ElapsedNanos: int64(2 * time.Second), TCP: model.TCPStats{OutSegments: 2000, Retransmits: 40}},
+		},
+	}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	evidence := strings.Join(findings[0].Evidence, " ")
+	for _, want := range []string{
+		"eBPF tcp_retransmit_events unavailable: load tcp retransmit programs: permission denied",
+		"eBPF tcp_retransmit_ipv4_flows unavailable: load tcp retransmit programs: permission denied",
+	} {
+		if !strings.Contains(evidence, want) {
+			t.Fatalf("missing feature visibility evidence %q: %s", want, evidence)
+		}
+	}
+	if strings.Contains(evidence, "eBPF observed") {
+		t.Fatalf("unexpected eBPF event evidence when eBPF samples are absent: %s", evidence)
+	}
+}
+
+func TestAnalyzeRetransmissionsReportsDisabledEBPFFeatures(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{
+		Version: model.FormatVersion,
+		EBPFFeatures: []model.EBPFFeatureStatus{
+			{
+				Name:            "tcp_retransmit_events",
+				Status:          model.CollectorDisabled,
+				VisibilityScope: "host-wide TCP retransmission events",
+			},
+			{
+				Name:            "tcp_retransmit_ipv4_flows",
+				Status:          model.CollectorDisabled,
+				VisibilityScope: "bounded IPv4 TCP retransmission flow counters",
+			},
+		},
+		Samples: []model.Sample{
+			{Timestamp: now, ElapsedNanos: int64(time.Second), TCP: model.TCPStats{OutSegments: 1000, Retransmits: 10}},
+			{Timestamp: now.Add(time.Second), ElapsedNanos: int64(2 * time.Second), TCP: model.TCPStats{OutSegments: 2000, Retransmits: 40}},
+		},
+	}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	evidence := strings.Join(findings[0].Evidence, " ")
+	for _, want := range []string{
+		"eBPF tcp_retransmit_events disabled",
+		"eBPF tcp_retransmit_ipv4_flows disabled",
+	} {
+		if !strings.Contains(evidence, want) {
+			t.Fatalf("missing feature visibility evidence %q: %s", want, evidence)
+		}
+	}
+}
+
 func TestAnalyzeRetransmissionsIncludesTopEBPFFlows(t *testing.T) {
 	now := time.Now()
 	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
@@ -582,6 +691,28 @@ func assertNoQdiscFinding(t *testing.T, r model.Recording) {
 		if finding.Summary == "The selected interface qdisc recorded drops or overlimits" {
 			t.Fatalf("unexpected qdisc finding: %+v", findings)
 		}
+	}
+}
+
+func retransmissionRecordingWithFeatures(features []model.EBPFFeatureStatus) model.Recording {
+	now := time.Now()
+	return model.Recording{
+		Version:      model.FormatVersion,
+		EBPFFeatures: features,
+		Samples: []model.Sample{
+			{
+				Timestamp:    now,
+				ElapsedNanos: int64(time.Second),
+				TCP:          model.TCPStats{OutSegments: 1000, Retransmits: 10},
+				EBPF:         &model.EBPFStats{TCPRetransmitEvents: 5},
+			},
+			{
+				Timestamp:    now.Add(time.Second),
+				ElapsedNanos: int64(2 * time.Second),
+				TCP:          model.TCPStats{OutSegments: 2000, Retransmits: 40},
+				EBPF:         &model.EBPFStats{TCPRetransmitEvents: 35},
+			},
+		},
 	}
 }
 
