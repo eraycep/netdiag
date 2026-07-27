@@ -164,6 +164,8 @@ Implemented:
 - [x] Root integration test verifies a controlled retransmission produces both
   a host-wide eBPF event increase and a loopback per-flow entry.
 - [x] Per-sample serialization budget for eBPF retransmit flows.
+- [x] eBPF feature visibility is recorded and surfaced in TCP retransmission
+  findings.
 
 Remaining:
 

@@ -50,6 +50,8 @@ func usage() error {
 	return nil
 }
 
+var newEBPFCollector = ebpfcollector.New
+
 func record(args []string) error {
 	fs := flag.NewFlagSet("record", flag.ContinueOnError)
 	duration := fs.Duration("duration", 30*time.Second, "capture duration")
@@ -98,7 +100,7 @@ func record(args []string) error {
 	var bpfCollector *ebpfcollector.Collector
 	if *useEBPF {
 		var err error
-		bpfCollector, err = ebpfcollector.New()
+		bpfCollector, err = newEBPFCollector()
 		if err != nil {
 			if updateErr := updateCollectorStatus(r.Collectors, "ebpf_tcp_retransmit", model.CollectorUnavailable, err.Error()); updateErr != nil {
 				return updateErr

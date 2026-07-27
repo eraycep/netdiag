@@ -156,6 +156,8 @@ The analyzer currently reports conservative counter-level findings:
 When eBPF per-flow retransmission data is available, TCP retransmission findings
 include the top IPv4 flow tuples as supporting evidence. If the serialized flow
 list was capped by `--max-ebpf-flows`, the finding also reports the truncation.
+If an eBPF feature was disabled or unavailable, the finding reports that
+visibility gap with the recorded reason when one is available.
 
 Each finding includes:
 
@@ -182,6 +184,14 @@ Evidence: 153 retransmitted of 1101 outbound TCP segments (13.90%)
 Evidence: eBPF observed 161 tcp_retransmit_skb tracepoint events
 Evidence: Top retransmitting IPv4 flow: 127.0.0.1:43946 -> 127.0.0.1:40981 had 4 retransmits
 Next step: Check packet loss, ECN/congestion signals, peer health, and interface error counters.
+```
+
+When eBPF visibility is missing, evidence uses the feature-level status from
+the capture:
+
+```text
+Evidence: eBPF tcp_retransmit_events unavailable: permission denied
+Evidence: eBPF tcp_retransmit_ipv4_flows disabled
 ```
 
 Comparison example:

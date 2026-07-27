@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/eray/netdiag/internal/ebpfcollector"
 	"github.com/eray/netdiag/internal/model"
 )
 
@@ -114,6 +116,57 @@ func TestRecordStopsAtMaximumSampleCount(t *testing.T) {
 	for _, feature := range recording.EBPFFeatures {
 		if feature.Status != model.CollectorDisabled {
 			t.Fatalf("eBPF feature %s status = %q, want %q", feature.Name, feature.Status, model.CollectorDisabled)
+		}
+		if feature.VisibilityScope == "" {
+			t.Fatalf("eBPF feature %s has no visibility scope", feature.Name)
+		}
+	}
+}
+
+func TestRecordSerializesUnavailableEBPFFeatures(t *testing.T) {
+	oldNewEBPFCollector := newEBPFCollector
+	newEBPFCollector = func() (*ebpfcollector.Collector, error) {
+		return nil, errors.New("load tcp retransmit programs: permission denied")
+	}
+	t.Cleanup(func() {
+		newEBPFCollector = oldNewEBPFCollector
+	})
+
+	path := filepath.Join(t.TempDir(), "capture.json")
+	stderr := captureStderr(t, func() {
+		err := record([]string{
+			"--duration=30s",
+			"--interval=10s",
+			"--max-samples=1",
+			"--output=" + path,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	if !strings.Contains(stderr, "eBPF unavailable") {
+		t.Fatalf("stderr missing eBPF unavailable warning: %s", stderr)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recording model.Recording
+	if err := json.Unmarshal(data, &recording); err != nil {
+		t.Fatal(err)
+	}
+
+	assertCollectorStatus(t, recording.Collectors, "ebpf_tcp_retransmit", model.CollectorUnavailable)
+	if len(recording.EBPFFeatures) != 2 {
+		t.Fatalf("eBPF feature count = %d, want 2", len(recording.EBPFFeatures))
+	}
+	for _, feature := range recording.EBPFFeatures {
+		if feature.Status != model.CollectorUnavailable {
+			t.Fatalf("eBPF feature %s status = %q, want %q", feature.Name, feature.Status, model.CollectorUnavailable)
+		}
+		if feature.Reason != "load tcp retransmit programs: permission denied" {
+			t.Fatalf("eBPF feature %s reason = %q", feature.Name, feature.Reason)
 		}
 		if feature.VisibilityScope == "" {
 			t.Fatalf("eBPF feature %s has no visibility scope", feature.Name)
