@@ -288,6 +288,11 @@ func buildCollectorManifest(iface string, useEBPF bool) []model.CollectorManifes
 			VisibilityScope: "host-wide TCP counters; not scoped to an interface, process, socket, or flow",
 		},
 		{
+			CollectorName:   "proc_tcp_sockets",
+			Status:          model.CollectorEnabled,
+			VisibilityScope: "network-namespace TCP socket queue aggregates from /proc/net/tcp and /proc/net/tcp6",
+		},
+		{
 			CollectorName:   "proc_softirq",
 			Status:          model.CollectorEnabled,
 			VisibilityScope: "host-wide NET_RX and NET_TX softirq counters preserved per CPU and as totals",

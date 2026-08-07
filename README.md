@@ -114,6 +114,7 @@ were serialized.
 | Signal | Source | Scope |
 | --- | --- | --- |
 | TCP segments, retransmits and input errors | `/proc/net/snmp` | network namespace |
+| TCP socket queue aggregates | `/proc/net/tcp`, `/proc/net/tcp6` | network namespace |
 | `NET_RX` and `NET_TX` softirq counters | `/proc/softirqs` | per CPU and host totals |
 | CPU scheduler counters | `/proc/stat` | per CPU |
 | CPU pressure | `/proc/pressure/cpu` | host, optional |
@@ -134,6 +135,7 @@ all-or-nothing retransmit tracepoint object.
 Required collectors:
 
 - `proc_tcp`
+- `proc_tcp_sockets`
 - `proc_softirq`
 - `proc_cpu`
 - `interface_stats` when `--interface` is set

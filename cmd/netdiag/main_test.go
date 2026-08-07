@@ -310,10 +310,11 @@ func TestBuildCollectorManifest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			manifest := buildCollectorManifest(tt.iface, tt.useEBPF)
-			if len(manifest) != 7 {
-				t.Fatalf("got %d collectors, want 7", len(manifest))
+			if len(manifest) != 8 {
+				t.Fatalf("got %d collectors, want 8", len(manifest))
 			}
 			assertCollectorStatus(t, manifest, "proc_tcp", model.CollectorEnabled)
+			assertCollectorStatus(t, manifest, "proc_tcp_sockets", model.CollectorEnabled)
 			assertCollectorStatus(t, manifest, "proc_softirq", model.CollectorEnabled)
 			assertCollectorStatus(t, manifest, "proc_cpu", model.CollectorEnabled)
 			assertCollectorStatus(t, manifest, "interface_stats", tt.interfaceStatus)

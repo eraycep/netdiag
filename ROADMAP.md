@@ -166,12 +166,14 @@ Implemented:
 - [x] Per-sample serialization budget for eBPF retransmit flows.
 - [x] eBPF feature visibility is recorded and surfaced in TCP retransmission
   findings.
+- [x] Aggregate TCP socket queue collection from `/proc/net/tcp` and
+  `/proc/net/tcp6`.
 
 Remaining:
 
 - Expand the CO-RE eBPF collector with feature detection and graceful
   degradation beyond the initial host-wide tracepoint counter.
-- Track connect latency, RTT, congestion state and socket queues.
+- Track connect latency, RTT, congestion state and per-flow socket queues.
 - Measure wakeup-to-run delay for selected service processes.
 - Correlate flow events without retaining payloads.
 - Add broader capture budgets, sampling and cardinality controls for future

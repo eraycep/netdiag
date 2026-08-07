@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-const FormatVersion = 9
+const FormatVersion = 10
 
 type CollectorStatus string
 
@@ -31,6 +31,7 @@ type Host struct {
 type Sample struct {
 	Timestamp    time.Time       `json:"timestamp"`
 	TCP          TCPStats        `json:"tcp"`
+	TCPSockets   TCPSocketStats  `json:"tcp_sockets"`
 	SoftIRQ      SoftIRQStats    `json:"softirq"`
 	Interface    *InterfaceStats `json:"interface,omitempty"`
 	EBPF         *EBPFStats      `json:"ebpf,omitempty"`
@@ -45,6 +46,17 @@ type TCPStats struct {
 	OutSegments uint64 `json:"out_segments"`
 	Retransmits uint64 `json:"retransmits"`
 	InErrors    uint64 `json:"in_errors"`
+}
+
+type TCPSocketStats struct {
+	Sockets          uint64 `json:"sockets"`
+	Established      uint64 `json:"established"`
+	TXQueue          uint64 `json:"tx_queue"`
+	RXQueue          uint64 `json:"rx_queue"`
+	MaxTXQueue       uint64 `json:"max_tx_queue"`
+	MaxRXQueue       uint64 `json:"max_rx_queue"`
+	NonZeroTXSockets uint64 `json:"nonzero_tx_sockets"`
+	NonZeroRXSockets uint64 `json:"nonzero_rx_sockets"`
 }
 
 type IRQStats struct {

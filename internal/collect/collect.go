@@ -24,6 +24,10 @@ func (c Collector) Sample(iface string) (model.Sample, error) {
 	if err != nil {
 		return model.Sample{}, err
 	}
+	tcpSockets, err := c.readTCPSockets()
+	if err != nil {
+		return model.Sample{}, err
+	}
 	softirq, err := c.readSoftIRQs()
 	if err != nil {
 		return model.Sample{}, err
@@ -32,7 +36,7 @@ func (c Collector) Sample(iface string) (model.Sample, error) {
 	if err != nil {
 		return model.Sample{}, err
 	}
-	s := model.Sample{TCP: tcp, SoftIRQ: softirq, CPU: cpu}
+	s := model.Sample{TCP: tcp, TCPSockets: tcpSockets, SoftIRQ: softirq, CPU: cpu}
 	if iface != "" {
 		stats, err := c.readInterface(iface)
 		if err != nil {
