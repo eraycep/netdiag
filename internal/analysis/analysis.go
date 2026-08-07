@@ -79,6 +79,9 @@ func Analyze(r model.Recording) ([]Finding, error) {
 	if finding, ok := analyzeTCPSocketQueues(first, last); ok {
 		findings = append(findings, finding)
 	}
+	if finding, ok := analyzeTCPTransmitSocketQueues(first, last); ok {
+		findings = append(findings, finding)
+	}
 	if !resets.qdisc {
 		if finding, ok := analyzeQdiscDrops(first, last); ok {
 			findings = append(findings, finding)
@@ -135,7 +138,7 @@ func analyzeTCPSocketQueues(first, last model.Sample) (Finding, bool) {
 		return Finding{}, false
 	}
 	rxGrowth := last.TCPSockets.RXQueue - first.TCPSockets.RXQueue
-	if rxGrowth < minTCPReceiveQueueGrowth || last.TCPSockets.NonZeroRXSockets == 0 {
+	if rxGrowth < minTCPSocketQueueGrowth || last.TCPSockets.NonZeroRXSockets == 0 {
 		return Finding{}, false
 	}
 
@@ -153,6 +156,32 @@ func analyzeTCPSocketQueues(first, last model.Sample) (Finding, bool) {
 		Summary:    "TCP socket receive queues grew during the capture",
 		Evidence:   evidence,
 		NextStep:   "Check whether the application or peer was slow to read from established sockets.",
+	}, true
+}
+
+func analyzeTCPTransmitSocketQueues(first, last model.Sample) (Finding, bool) {
+	if last.TCPSockets.TXQueue <= first.TCPSockets.TXQueue {
+		return Finding{}, false
+	}
+	txGrowth := last.TCPSockets.TXQueue - first.TCPSockets.TXQueue
+	if txGrowth < minTCPSocketQueueGrowth || last.TCPSockets.NonZeroTXSockets == 0 {
+		return Finding{}, false
+	}
+
+	evidence := []string{
+		fmt.Sprintf("TCP transmit queues increased by %d bytes", txGrowth),
+		fmt.Sprintf("%d sockets ended with non-zero transmit queues", last.TCPSockets.NonZeroTXSockets),
+	}
+	if last.TCPSockets.MaxTXQueue > 0 {
+		evidence = append(evidence, fmt.Sprintf("largest observed transmit queue was %d bytes", last.TCPSockets.MaxTXQueue))
+	}
+
+	return Finding{
+		Severity:   "warning",
+		Confidence: "possible",
+		Summary:    "TCP socket transmit queues grew during the capture",
+		Evidence:   evidence,
+		NextStep:   "Check whether the peer, network path, or send buffer backpressure prevented data from draining.",
 	}, true
 }
 
@@ -256,7 +285,7 @@ func qdiscKey(qdisc model.QdiscLineStats) string {
 
 const (
 	minNetRXSoftIRQDelta          = uint64(1000)
-	minTCPReceiveQueueGrowth      = uint64(64 * 1024)
+	minTCPSocketQueueGrowth       = uint64(64 * 1024)
 	receiveConcentrationThreshold = 0.80
 	cpuBusyThreshold              = 0.70
 )

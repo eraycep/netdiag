@@ -246,12 +246,64 @@ func TestAnalyzeReportsTCPSocketReceiveQueueGrowth(t *testing.T) {
 }
 
 func TestAnalyzeIgnoresSmallTCPSocketReceiveQueueGrowth(t *testing.T) {
-	r := tcpSocketQueueRecording(1024, 1024+32*1024, 1)
+	r := tcpSocketQueueRecording(1024, 1024+32*1024, 1, 0, 0, 0)
 	assertNoTCPSocketQueueFinding(t, r)
 }
 
 func TestAnalyzeIgnoresDecreasedTCPSocketReceiveQueue(t *testing.T) {
-	r := tcpSocketQueueRecording(128*1024, 64*1024, 1)
+	r := tcpSocketQueueRecording(128*1024, 64*1024, 1, 0, 0, 0)
+	assertNoTCPSocketQueueFinding(t, r)
+}
+
+func TestAnalyzeReportsTCPSocketTransmitQueueGrowth(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{
+			Timestamp:    now,
+			ElapsedNanos: int64(time.Second),
+			TCPSockets:   model.TCPSocketStats{TXQueue: 2048},
+		},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			TCPSockets: model.TCPSocketStats{
+				TXQueue:          2048 + 80*1024,
+				MaxTXQueue:       64 * 1024,
+				NonZeroTXSockets: 1,
+			},
+		},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if findings[0].Summary != "TCP socket transmit queues grew during the capture" {
+		t.Fatalf("finding summary = %q", findings[0].Summary)
+	}
+	if findings[0].Severity != "warning" || findings[0].Confidence != "possible" {
+		t.Fatalf("finding severity/confidence = %s/%s", findings[0].Severity, findings[0].Confidence)
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	for _, want := range []string{
+		"TCP transmit queues increased by 81920 bytes",
+		"1 sockets ended with non-zero transmit queues",
+		"largest observed transmit queue was 65536 bytes",
+	} {
+		if !strings.Contains(evidence, want) {
+			t.Fatalf("missing socket queue evidence %q: %s", want, evidence)
+		}
+	}
+}
+
+func TestAnalyzeIgnoresSmallTCPSocketTransmitQueueGrowth(t *testing.T) {
+	r := tcpSocketQueueRecording(0, 0, 0, 1024, 1024+32*1024, 1)
+	assertNoTCPSocketQueueFinding(t, r)
+}
+
+func TestAnalyzeIgnoresDecreasedTCPSocketTransmitQueue(t *testing.T) {
+	r := tcpSocketQueueRecording(0, 0, 0, 128*1024, 64*1024, 1)
 	assertNoTCPSocketQueueFinding(t, r)
 }
 
@@ -746,13 +798,16 @@ func assertNoQdiscFinding(t *testing.T, r model.Recording) {
 	}
 }
 
-func tcpSocketQueueRecording(firstRXQueue, lastRXQueue, lastNonZeroRXSockets uint64) model.Recording {
+func tcpSocketQueueRecording(firstRXQueue, lastRXQueue, lastNonZeroRXSockets, firstTXQueue, lastTXQueue, lastNonZeroTXSockets uint64) model.Recording {
 	now := time.Now()
 	return model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
 		{
 			Timestamp:    now,
 			ElapsedNanos: int64(time.Second),
-			TCPSockets:   model.TCPSocketStats{RXQueue: firstRXQueue},
+			TCPSockets: model.TCPSocketStats{
+				RXQueue: firstRXQueue,
+				TXQueue: firstTXQueue,
+			},
 		},
 		{
 			Timestamp:    now.Add(time.Second),
@@ -760,6 +815,8 @@ func tcpSocketQueueRecording(firstRXQueue, lastRXQueue, lastNonZeroRXSockets uin
 			TCPSockets: model.TCPSocketStats{
 				RXQueue:          lastRXQueue,
 				NonZeroRXSockets: lastNonZeroRXSockets,
+				TXQueue:          lastTXQueue,
+				NonZeroTXSockets: lastNonZeroTXSockets,
 			},
 		},
 	}}
@@ -772,7 +829,8 @@ func assertNoTCPSocketQueueFinding(t *testing.T, r model.Recording) {
 		t.Fatal(err)
 	}
 	for _, finding := range findings {
-		if finding.Summary == "TCP socket receive queues grew during the capture" {
+		if finding.Summary == "TCP socket receive queues grew during the capture" ||
+			finding.Summary == "TCP socket transmit queues grew during the capture" {
 			t.Fatalf("unexpected TCP socket queue finding: %+v", findings)
 		}
 	}
