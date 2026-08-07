@@ -203,6 +203,58 @@ func TestAnalyzeRetransmissionsIncludesFlowTruncationEvidence(t *testing.T) {
 	}
 }
 
+func TestAnalyzeReportsTCPSocketReceiveQueueGrowth(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{
+			Timestamp:    now,
+			ElapsedNanos: int64(time.Second),
+			TCPSockets:   model.TCPSocketStats{RXQueue: 1024},
+		},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			TCPSockets: model.TCPSocketStats{
+				RXQueue:          1024 + 70*1024,
+				MaxRXQueue:       48 * 1024,
+				NonZeroRXSockets: 2,
+			},
+		},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if findings[0].Summary != "TCP socket receive queues grew during the capture" {
+		t.Fatalf("finding summary = %q", findings[0].Summary)
+	}
+	if findings[0].Severity != "warning" || findings[0].Confidence != "possible" {
+		t.Fatalf("finding severity/confidence = %s/%s", findings[0].Severity, findings[0].Confidence)
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	for _, want := range []string{
+		"TCP receive queues increased by 71680 bytes",
+		"2 sockets ended with non-zero receive queues",
+		"largest observed receive queue was 49152 bytes",
+	} {
+		if !strings.Contains(evidence, want) {
+			t.Fatalf("missing socket queue evidence %q: %s", want, evidence)
+		}
+	}
+}
+
+func TestAnalyzeIgnoresSmallTCPSocketReceiveQueueGrowth(t *testing.T) {
+	r := tcpSocketQueueRecording(1024, 1024+32*1024, 1)
+	assertNoTCPSocketQueueFinding(t, r)
+}
+
+func TestAnalyzeIgnoresDecreasedTCPSocketReceiveQueue(t *testing.T) {
+	r := tcpSocketQueueRecording(128*1024, 64*1024, 1)
+	assertNoTCPSocketQueueFinding(t, r)
+}
+
 func TestAnalyzeRejectsShortRecording(t *testing.T) {
 	_, err := Analyze(model.Recording{Version: model.FormatVersion, Samples: []model.Sample{{}}})
 	if err == nil {
@@ -690,6 +742,38 @@ func assertNoQdiscFinding(t *testing.T, r model.Recording) {
 	for _, finding := range findings {
 		if finding.Summary == "The selected interface qdisc recorded drops or overlimits" {
 			t.Fatalf("unexpected qdisc finding: %+v", findings)
+		}
+	}
+}
+
+func tcpSocketQueueRecording(firstRXQueue, lastRXQueue, lastNonZeroRXSockets uint64) model.Recording {
+	now := time.Now()
+	return model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{
+			Timestamp:    now,
+			ElapsedNanos: int64(time.Second),
+			TCPSockets:   model.TCPSocketStats{RXQueue: firstRXQueue},
+		},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			TCPSockets: model.TCPSocketStats{
+				RXQueue:          lastRXQueue,
+				NonZeroRXSockets: lastNonZeroRXSockets,
+			},
+		},
+	}}
+}
+
+func assertNoTCPSocketQueueFinding(t *testing.T, r model.Recording) {
+	t.Helper()
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range findings {
+		if finding.Summary == "TCP socket receive queues grew during the capture" {
+			t.Fatalf("unexpected TCP socket queue finding: %+v", findings)
 		}
 	}
 }

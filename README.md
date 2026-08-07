@@ -151,6 +151,7 @@ Optional collectors:
 The analyzer currently reports conservative counter-level findings:
 
 - elevated TCP retransmissions;
+- TCP socket receive queue growth;
 - selected-interface drops or errors;
 - cumulative counter resets during the capture;
 - network receive processing concentrated on a busy CPU.

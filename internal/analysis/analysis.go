@@ -76,6 +76,9 @@ func Analyze(r model.Recording) ([]Finding, error) {
 			})
 		}
 	}
+	if finding, ok := analyzeTCPSocketQueues(first, last); ok {
+		findings = append(findings, finding)
+	}
 	if !resets.qdisc {
 		if finding, ok := analyzeQdiscDrops(first, last); ok {
 			findings = append(findings, finding)
@@ -125,6 +128,32 @@ func tcpRetransmitFlowEvidence(stats *model.EBPFStats) []string {
 		))
 	}
 	return evidence
+}
+
+func analyzeTCPSocketQueues(first, last model.Sample) (Finding, bool) {
+	if last.TCPSockets.RXQueue <= first.TCPSockets.RXQueue {
+		return Finding{}, false
+	}
+	rxGrowth := last.TCPSockets.RXQueue - first.TCPSockets.RXQueue
+	if rxGrowth < minTCPReceiveQueueGrowth || last.TCPSockets.NonZeroRXSockets == 0 {
+		return Finding{}, false
+	}
+
+	evidence := []string{
+		fmt.Sprintf("TCP receive queues increased by %d bytes", rxGrowth),
+		fmt.Sprintf("%d sockets ended with non-zero receive queues", last.TCPSockets.NonZeroRXSockets),
+	}
+	if last.TCPSockets.MaxRXQueue > 0 {
+		evidence = append(evidence, fmt.Sprintf("largest observed receive queue was %d bytes", last.TCPSockets.MaxRXQueue))
+	}
+
+	return Finding{
+		Severity:   "warning",
+		Confidence: "possible",
+		Summary:    "TCP socket receive queues grew during the capture",
+		Evidence:   evidence,
+		NextStep:   "Check whether the application or peer was slow to read from established sockets.",
+	}, true
 }
 
 func ebpfFeatureVisibilityEvidence(r model.Recording, name string) []string {
@@ -227,6 +256,7 @@ func qdiscKey(qdisc model.QdiscLineStats) string {
 
 const (
 	minNetRXSoftIRQDelta          = uint64(1000)
+	minTCPReceiveQueueGrowth      = uint64(64 * 1024)
 	receiveConcentrationThreshold = 0.80
 	cpuBusyThreshold              = 0.70
 )
