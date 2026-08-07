@@ -193,6 +193,8 @@ Baseline-only findings:
 
 Key delta changes:
 - TCP retransmits: 3411/15204971 outbound segments (0.02%) -> 694/1829 outbound segments (37.94%)
+- TCP receive queue: 0 B, 0 sockets non-zero -> 0 B, 0 sockets non-zero
+- TCP transmit queue: 0 B, 0 sockets non-zero -> 0 B, 0 sockets non-zero
 - top NET_RX softirq CPU: CPU14 7.3% of 629844 -> CPU2 92.1% of 8663
 - top NET_RX CPU busy: CPU14 50.6% -> CPU2 8.0%
 - qdisc drops: 0 -> 882

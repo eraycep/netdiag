@@ -63,6 +63,14 @@ prove application causality.
 
 If the finding is not reported, increase `PAYLOAD_BYTES` or `SERVER_SLEEP`.
 
+`netdiag compare` also surfaces socket queue state in the key delta section
+when comparing a baseline capture with an incident capture:
+
+```text
+- TCP receive queue: 0 B, 0 sockets non-zero -> 127168 B, 1 sockets non-zero
+- TCP transmit queue: 0 B, 0 sockets non-zero -> 0 B, 0 sockets non-zero
+```
+
 ## Validated run
 
 On August 7, 2026, a short validation run completed on the development host

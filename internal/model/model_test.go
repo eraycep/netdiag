@@ -135,6 +135,41 @@ func TestSampleJSONIncludesTCPSocketStats(t *testing.T) {
 	}
 }
 
+func TestSampleJSONIncludesProcessStats(t *testing.T) {
+	want := Sample{
+		Process: &ProcessStats{
+			PID:               123,
+			RuntimeNanos:      100,
+			RunqueueWaitNanos: 200,
+			Timeslices:        3,
+		},
+	}
+
+	data, err := json.Marshal(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{
+		"process",
+		"pid",
+		"runtime_ns",
+		"runqueue_wait_ns",
+		"timeslices",
+	} {
+		if !strings.Contains(string(data), field) {
+			t.Fatalf("serialized sample missing %q: %s", field, data)
+		}
+	}
+
+	var got Sample
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Process == nil || *got.Process != *want.Process {
+		t.Fatalf("round trip mismatch: got %+v, want %+v", got.Process, want.Process)
+	}
+}
+
 func TestEBPFFeatureStatusJSONOmitsEmptyReason(t *testing.T) {
 	feature := EBPFFeatureStatus{
 		Name:            "tcp_retransmit_events",

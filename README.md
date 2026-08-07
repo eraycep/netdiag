@@ -75,6 +75,12 @@ Disable eBPF explicitly when running unprivileged:
 ./bin/netdiag record --ebpf=false --duration 30s --output capture.json
 ```
 
+Record selected-process scheduler counters:
+
+```sh
+./bin/netdiag record --pid 1234 --duration 30s --output capture.json
+```
+
 Limit serialized eBPF per-flow retransmit entries:
 
 ```sh
@@ -118,6 +124,7 @@ were serialized.
 | `NET_RX` and `NET_TX` softirq counters | `/proc/softirqs` | per CPU and host totals |
 | CPU scheduler counters | `/proc/stat` | per CPU |
 | CPU pressure | `/proc/pressure/cpu` | host, optional |
+| Selected process scheduler counters | `/proc/<pid>/schedstat` | selected process when `--pid` is set |
 | Interface packets, bytes, drops and errors | `/sys/class/net/*/statistics` | selected interface |
 | IRQ counts and affinity | `/proc/interrupts`, `/proc/irq/*/smp_affinity_list`, `/sys/class/net/*/device/msi_irqs` | selected interface when discoverable |
 | Qdisc counters | `tc -s qdisc show dev <iface>` | selected interface |
@@ -142,6 +149,7 @@ Required collectors:
 
 Optional collectors:
 
+- `proc_pid_schedstat`
 - `proc_interrupts`
 - `tc_qdisc`
 - `ebpf_tcp_retransmit`

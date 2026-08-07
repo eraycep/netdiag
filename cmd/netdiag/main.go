@@ -57,6 +57,7 @@ func record(args []string) error {
 	duration := fs.Duration("duration", 30*time.Second, "capture duration")
 	interval := fs.Duration("interval", time.Second, "sample interval")
 	iface := fs.String("interface", "", "network interface to monitor")
+	pid := fs.Int("pid", 0, "process ID to monitor with /proc/<pid>/schedstat")
 	output := fs.String("output", "capture.json", "output recording")
 	useEBPF := fs.Bool("ebpf", true, "collect TCP retransmit tracepoint events when permitted")
 	maxSamples := fs.Int("max-samples", 3600, "maximum samples")
@@ -69,6 +70,9 @@ func record(args []string) error {
 	if *duration <= 0 || *interval <= 0 {
 		return errors.New("duration and interval must be positive")
 	}
+	if *pid < 0 {
+		return errors.New("pid must be non-negative")
+	}
 
 	hostname, _ := os.Hostname()
 	kernel := "unknown"
@@ -79,8 +83,8 @@ func record(args []string) error {
 	captureStart := time.Now()
 
 	r := model.Recording{Version: model.FormatVersion, StartedAt: captureStart.UTC(),
-		Interface: *iface, Host: model.Host{Hostname: hostname, Kernel: kernel},
-		Collectors: buildCollectorManifest(*iface, *useEBPF)}
+		Interface: *iface, PID: *pid, Host: model.Host{Hostname: hostname, Kernel: kernel},
+		Collectors: buildCollectorManifest(*iface, *pid, *useEBPF)}
 	if *useEBPF {
 		r.EBPFFeatures = ebpfcollector.UnavailableFeatures("collector was not initialized")
 	} else {
@@ -122,6 +126,7 @@ func record(args []string) error {
 
 	irqCollectorActive := *iface != ""
 	qdiscCollectorActive := *iface != ""
+	processCollectorActive := *pid > 0
 
 	for {
 		sample, err := c.Sample(*iface)
@@ -152,6 +157,19 @@ func record(args []string) error {
 				fmt.Fprintf(os.Stderr, "netdiag: qdisc unavailable; continuing without qdisc counters: %v\n", err)
 			} else {
 				sample.Qdisc = qdisc
+			}
+		}
+
+		if processCollectorActive {
+			process, err := c.ReadProcessSchedstat(*pid)
+			if err != nil {
+				processCollectorActive = false
+				if updateErr := updateCollectorStatus(r.Collectors, "proc_pid_schedstat", model.CollectorUnavailable, err.Error()); updateErr != nil {
+					return updateErr
+				}
+				fmt.Fprintf(os.Stderr, "netdiag: process schedstat unavailable; continuing without process counters: %v\n", err)
+			} else {
+				sample.Process = &process
 			}
 		}
 
@@ -263,7 +281,7 @@ func readRecording(path string) (model.Recording, error) {
 	return r, nil
 }
 
-func buildCollectorManifest(iface string, useEBPF bool) []model.CollectorManifest {
+func buildCollectorManifest(iface string, pid int, useEBPF bool) []model.CollectorManifest {
 	interfaceStatus := model.CollectorDisabled
 	if iface != "" {
 		interfaceStatus = model.CollectorEnabled
@@ -275,6 +293,10 @@ func buildCollectorManifest(iface string, useEBPF bool) []model.CollectorManifes
 	qdiscStatus := model.CollectorDisabled
 	if iface != "" {
 		qdiscStatus = model.CollectorEnabled
+	}
+	processStatus := model.CollectorDisabled
+	if pid > 0 {
+		processStatus = model.CollectorEnabled
 	}
 	ebpfStatus := model.CollectorDisabled
 	if useEBPF {
@@ -301,6 +323,11 @@ func buildCollectorManifest(iface string, useEBPF bool) []model.CollectorManifes
 			CollectorName:   "proc_cpu",
 			Status:          model.CollectorEnabled,
 			VisibilityScope: "host per-CPU scheduler counters from /proc/stat and optional CPU pressure from /proc/pressure/cpu",
+		},
+		{
+			CollectorName:   "proc_pid_schedstat",
+			Status:          processStatus,
+			VisibilityScope: "selected process scheduler runtime, runqueue wait time and timeslices from /proc/<pid>/schedstat",
 		},
 		{
 			CollectorName:   "interface_stats",

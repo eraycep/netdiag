@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -203,6 +204,40 @@ func TestRecordElapsedTimeIncreases(t *testing.T) {
 	}
 }
 
+func TestRecordSerializesProcessSchedstat(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "capture.json")
+	err := record([]string{
+		"--duration=30s",
+		"--interval=10s",
+		"--max-samples=1",
+		"--ebpf=false",
+		"--pid", fmt.Sprint(os.Getpid()),
+		"--output=" + path,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recording model.Recording
+	if err := json.Unmarshal(data, &recording); err != nil {
+		t.Fatal(err)
+	}
+	if recording.PID != os.Getpid() {
+		t.Fatalf("recording pid = %d, want %d", recording.PID, os.Getpid())
+	}
+	if len(recording.Samples) != 1 || recording.Samples[0].Process == nil {
+		t.Fatalf("recording did not include process schedstat: %+v", recording.Samples)
+	}
+	if recording.Samples[0].Process.PID != os.Getpid() {
+		t.Fatalf("sample process pid = %d, want %d", recording.Samples[0].Process.PID, os.Getpid())
+	}
+	assertCollectorStatus(t, recording.Collectors, "proc_pid_schedstat", model.CollectorEnabled)
+}
+
 func TestRecordRejectsInvalidMaximumSampleCount(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "capture.json")
 	err := record([]string{"--max-samples=0", "--ebpf=false", "--output=" + path})
@@ -219,6 +254,17 @@ func TestRecordRejectsInvalidMaximumEBPFFlowCount(t *testing.T) {
 	err := record([]string{"--max-ebpf-flows=-1", "--ebpf=false", "--output=" + path})
 	if err == nil || !strings.Contains(err.Error(), "max ebpf flows must be non-negative") {
 		t.Fatalf("error = %v, want maximum eBPF flow validation error", err)
+	}
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("output was created for invalid configuration: %v", statErr)
+	}
+}
+
+func TestRecordRejectsInvalidPID(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "capture.json")
+	err := record([]string{"--pid=-1", "--ebpf=false", "--output=" + path})
+	if err == nil || !strings.Contains(err.Error(), "pid must be non-negative") {
+		t.Fatalf("error = %v, want pid validation error", err)
 	}
 	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
 		t.Fatalf("output was created for invalid configuration: %v", statErr)
@@ -299,24 +345,28 @@ func TestBuildCollectorManifest(t *testing.T) {
 	tests := []struct {
 		name            string
 		iface           string
+		pid             int
 		useEBPF         bool
 		interfaceStatus model.CollectorStatus
+		processStatus   model.CollectorStatus
 		ebpfStatus      model.CollectorStatus
 	}{
-		{name: "optional collectors enabled", iface: "eth0", useEBPF: true, interfaceStatus: model.CollectorEnabled, ebpfStatus: model.CollectorEnabled},
-		{name: "optional collectors disabled", interfaceStatus: model.CollectorDisabled, ebpfStatus: model.CollectorDisabled},
+		{name: "optional collectors enabled", iface: "eth0", useEBPF: true, interfaceStatus: model.CollectorEnabled, processStatus: model.CollectorDisabled, ebpfStatus: model.CollectorEnabled},
+		{name: "process collector enabled", pid: 123, interfaceStatus: model.CollectorDisabled, processStatus: model.CollectorEnabled, ebpfStatus: model.CollectorDisabled},
+		{name: "optional collectors disabled", interfaceStatus: model.CollectorDisabled, processStatus: model.CollectorDisabled, ebpfStatus: model.CollectorDisabled},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manifest := buildCollectorManifest(tt.iface, tt.useEBPF)
-			if len(manifest) != 8 {
-				t.Fatalf("got %d collectors, want 8", len(manifest))
+			manifest := buildCollectorManifest(tt.iface, tt.pid, tt.useEBPF)
+			if len(manifest) != 9 {
+				t.Fatalf("got %d collectors, want 9", len(manifest))
 			}
 			assertCollectorStatus(t, manifest, "proc_tcp", model.CollectorEnabled)
 			assertCollectorStatus(t, manifest, "proc_tcp_sockets", model.CollectorEnabled)
 			assertCollectorStatus(t, manifest, "proc_softirq", model.CollectorEnabled)
 			assertCollectorStatus(t, manifest, "proc_cpu", model.CollectorEnabled)
+			assertCollectorStatus(t, manifest, "proc_pid_schedstat", tt.processStatus)
 			assertCollectorStatus(t, manifest, "interface_stats", tt.interfaceStatus)
 			assertCollectorStatus(t, manifest, "proc_interrupts", tt.interfaceStatus)
 			assertCollectorStatus(t, manifest, "tc_qdisc", tt.interfaceStatus)
@@ -326,7 +376,7 @@ func TestBuildCollectorManifest(t *testing.T) {
 }
 
 func TestUpdateCollectorStatus(t *testing.T) {
-	manifest := buildCollectorManifest("", true)
+	manifest := buildCollectorManifest("", 0, true)
 	if err := updateCollectorStatus(manifest, "ebpf_tcp_retransmit", model.CollectorUnavailable, "permission denied"); err != nil {
 		t.Fatal(err)
 	}
@@ -343,7 +393,7 @@ func TestUpdateCollectorStatus(t *testing.T) {
 }
 
 func TestUpdateCollectorStatusRejectsUnknownCollector(t *testing.T) {
-	manifest := buildCollectorManifest("", false)
+	manifest := buildCollectorManifest("", 0, false)
 	if err := updateCollectorStatus(manifest, "missing", model.CollectorUnavailable, "failed"); err == nil {
 		t.Fatal("expected an error")
 	}

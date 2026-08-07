@@ -170,14 +170,19 @@ Implemented:
   `/proc/net/tcp6`.
 - [x] Conservative aggregate TCP receive-queue growth finding.
 - [x] Baseline-versus-incident TCP receive queue key delta.
+- [x] Conservative aggregate TCP transmit-queue growth finding.
+- [x] Baseline-versus-incident TCP transmit queue key delta.
 - [x] Reproducible loopback TCP receive-queue experiment.
+- [x] Optional selected-process scheduler counter collection from
+  `/proc/<pid>/schedstat`.
 
 Remaining:
 
 - Expand the CO-RE eBPF collector with feature detection and graceful
   degradation beyond the initial host-wide tracepoint counter.
 - Track connect latency, RTT, congestion state and per-flow socket attribution.
-- Measure wakeup-to-run delay for selected service processes.
+- Analyze selected-process scheduler delay and correlate it with network
+  symptoms.
 - Correlate flow events without retaining payloads.
 - Add broader capture budgets, sampling and cardinality controls for future
   eBPF event types.

@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-const FormatVersion = 10
+const FormatVersion = 11
 
 type CollectorStatus string
 
@@ -18,6 +18,7 @@ type Recording struct {
 	EndedAt      time.Time           `json:"ended_at"`
 	Host         Host                `json:"host"`
 	Interface    string              `json:"interface,omitempty"`
+	PID          int                 `json:"pid,omitempty"`
 	Samples      []Sample            `json:"samples"`
 	Collectors   []CollectorManifest `json:"collectors"`
 	EBPFFeatures []EBPFFeatureStatus `json:"ebpf_features,omitempty"`
@@ -39,6 +40,7 @@ type Sample struct {
 	IRQ          IRQStats        `json:"irq"`
 	Qdisc        QdiscStats      `json:"qdisc"`
 	CPU          CPUStats        `json:"cpu"`
+	Process      *ProcessStats   `json:"process,omitempty"`
 }
 
 type TCPStats struct {
@@ -118,6 +120,13 @@ type CPUTimeStats struct {
 	IRQ     uint64 `json:"irq"`
 	SoftIRQ uint64 `json:"softirq"`
 	Steal   uint64 `json:"steal"`
+}
+
+type ProcessStats struct {
+	PID               int    `json:"pid"`
+	RuntimeNanos      uint64 `json:"runtime_ns"`
+	RunqueueWaitNanos uint64 `json:"runqueue_wait_ns"`
+	Timeslices        uint64 `json:"timeslices"`
 }
 
 type CPUPressureStats struct {
