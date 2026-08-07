@@ -173,8 +173,8 @@ Each finding includes:
 sets, reports collector visibility differences, and prints key counter delta
 changes such as TCP retransmits and qdisc drops. TCP retransmit deltas include
 outbound segment denominators and percentages so raw retransmit counts are not
-misread without traffic volume, and TCP receive queue deltas show the final
-aggregate queue size and non-empty receive queue socket count. When both
+misread without traffic volume, and TCP socket queue deltas show the final
+aggregate queue sizes and non-empty socket counts. When both
 captures include eBPF retransmit flow data, the comparison also shows the top
 IPv4 flow tuples and whether a flow list was truncated by `--max-ebpf-flows`.
 

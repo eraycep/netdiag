@@ -168,6 +168,7 @@ func compareKeyDeltas(baseline, incident model.Recording) []KeyDeltaChange {
 	return []KeyDeltaChange{
 		{Name: "TCP retransmits", BaselineDisplay: tcpRetransmitDeltaDisplay(baseline), IncidentDisplay: tcpRetransmitDeltaDisplay(incident)},
 		{Name: "TCP receive queue", BaselineDisplay: tcpReceiveQueueDisplay(baseline), IncidentDisplay: tcpReceiveQueueDisplay(incident)},
+		{Name: "TCP transmit queue", BaselineDisplay: tcpTransmitQueueDisplay(baseline), IncidentDisplay: tcpTransmitQueueDisplay(incident)},
 		{Name: "top eBPF retransmit flows", BaselineDisplay: retransmitFlows.baseline, IncidentDisplay: retransmitFlows.incident},
 		{Name: "top NET_RX softirq CPU", BaselineDisplay: baselineReceiveCPU.softirq, IncidentDisplay: incidentReceiveCPU.softirq},
 		{Name: "top NET_RX CPU busy", BaselineDisplay: baselineReceiveCPU.busy, IncidentDisplay: incidentReceiveCPU.busy},
@@ -443,4 +444,12 @@ func tcpReceiveQueueDisplay(r model.Recording) string {
 	}
 	last := r.Samples[len(r.Samples)-1].TCPSockets
 	return fmt.Sprintf("%d B, %d sockets non-zero", last.RXQueue, last.NonZeroRXSockets)
+}
+
+func tcpTransmitQueueDisplay(r model.Recording) string {
+	if len(r.Samples) == 0 {
+		return "unavailable"
+	}
+	last := r.Samples[len(r.Samples)-1].TCPSockets
+	return fmt.Sprintf("%d B, %d sockets non-zero", last.TXQueue, last.NonZeroTXSockets)
 }

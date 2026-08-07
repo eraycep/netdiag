@@ -97,8 +97,8 @@ func TestCompareReportsReceiveCPUSignalChanges(t *testing.T) {
 }
 
 func TestCompareReportsTCPReceiveQueueSignalChanges(t *testing.T) {
-	baseline := tcpReceiveQueueComparisonRecording(0, 0)
-	incident := tcpReceiveQueueComparisonRecording(71680, 2)
+	baseline := tcpSocketQueueComparisonRecording(0, 0, 0, 0)
+	incident := tcpSocketQueueComparisonRecording(71680, 2, 0, 0)
 
 	comparison, err := Compare(baseline, incident)
 	if err != nil {
@@ -107,6 +107,22 @@ func TestCompareReportsTCPReceiveQueueSignalChanges(t *testing.T) {
 
 	rendered := RenderComparison("baseline.json", "incident.json", comparison)
 	want := "- TCP receive queue: 0 B, 0 sockets non-zero -> 71680 B, 2 sockets non-zero"
+	if !strings.Contains(rendered, want) {
+		t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+	}
+}
+
+func TestCompareReportsTCPTransmitQueueSignalChanges(t *testing.T) {
+	baseline := tcpSocketQueueComparisonRecording(0, 0, 0, 0)
+	incident := tcpSocketQueueComparisonRecording(0, 0, 32768, 1)
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	want := "- TCP transmit queue: 0 B, 0 sockets non-zero -> 32768 B, 1 sockets non-zero"
 	if !strings.Contains(rendered, want) {
 		t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
 	}
@@ -259,7 +275,7 @@ func receiveCPUComparisonRecording(firstSoftIRQ, lastSoftIRQ []model.SoftIRQCPUS
 	}}
 }
 
-func tcpReceiveQueueComparisonRecording(rxQueue, nonZeroRXSockets uint64) model.Recording {
+func tcpSocketQueueComparisonRecording(rxQueue, nonZeroRXSockets, txQueue, nonZeroTXSockets uint64) model.Recording {
 	now := time.Now()
 	return model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
 		{Timestamp: now, ElapsedNanos: int64(time.Second)},
@@ -269,6 +285,8 @@ func tcpReceiveQueueComparisonRecording(rxQueue, nonZeroRXSockets uint64) model.
 			TCPSockets: model.TCPSocketStats{
 				RXQueue:          rxQueue,
 				NonZeroRXSockets: nonZeroRXSockets,
+				TXQueue:          txQueue,
+				NonZeroTXSockets: nonZeroTXSockets,
 			},
 		},
 	}}
