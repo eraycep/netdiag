@@ -301,6 +301,16 @@ queue on a temporary host veth. See
 [docs/experiments/qdisc-drop.md](docs/experiments/qdisc-drop.md) for expected
 raw qdisc evidence and tuning guidance.
 
+Run the TCP receive-queue experiment with:
+
+```sh
+make experiment-rx-queue
+```
+
+It records a loopback TCP connection where the server accepts but does not read.
+See [docs/experiments/tcp-rx-queue.md](docs/experiments/tcp-rx-queue.md) for
+expected socket queue evidence and tuning guidance.
+
 ## Capture overhead benchmark
 
 Run the unprivileged recorder benchmark with:
