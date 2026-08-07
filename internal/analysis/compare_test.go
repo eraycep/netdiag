@@ -96,6 +96,22 @@ func TestCompareReportsReceiveCPUSignalChanges(t *testing.T) {
 	}
 }
 
+func TestCompareReportsTCPReceiveQueueSignalChanges(t *testing.T) {
+	baseline := tcpReceiveQueueComparisonRecording(0, 0)
+	incident := tcpReceiveQueueComparisonRecording(71680, 2)
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	want := "- TCP receive queue: 0 B, 0 sockets non-zero -> 71680 B, 2 sockets non-zero"
+	if !strings.Contains(rendered, want) {
+		t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+	}
+}
+
 func TestCompareReportsIncidentOnlyRetransmitFlow(t *testing.T) {
 	baseline := comparisonFlowRecording(nil, false, 0)
 	incident := comparisonFlowRecording([]model.TCPRetransmitFlow{
@@ -239,6 +255,21 @@ func receiveCPUComparisonRecording(firstSoftIRQ, lastSoftIRQ []model.SoftIRQCPUS
 			ElapsedNanos: int64(2 * time.Second),
 			SoftIRQ:      model.SoftIRQStats{CPUs: lastSoftIRQ},
 			CPU:          model.CPUStats{CPUs: lastCPU},
+		},
+	}}
+}
+
+func tcpReceiveQueueComparisonRecording(rxQueue, nonZeroRXSockets uint64) model.Recording {
+	now := time.Now()
+	return model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second)},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			TCPSockets: model.TCPSocketStats{
+				RXQueue:          rxQueue,
+				NonZeroRXSockets: nonZeroRXSockets,
+			},
 		},
 	}}
 }

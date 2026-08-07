@@ -167,6 +167,7 @@ func compareKeyDeltas(baseline, incident model.Recording) []KeyDeltaChange {
 
 	return []KeyDeltaChange{
 		{Name: "TCP retransmits", BaselineDisplay: tcpRetransmitDeltaDisplay(baseline), IncidentDisplay: tcpRetransmitDeltaDisplay(incident)},
+		{Name: "TCP receive queue", BaselineDisplay: tcpReceiveQueueDisplay(baseline), IncidentDisplay: tcpReceiveQueueDisplay(incident)},
 		{Name: "top eBPF retransmit flows", BaselineDisplay: retransmitFlows.baseline, IncidentDisplay: retransmitFlows.incident},
 		{Name: "top NET_RX softirq CPU", BaselineDisplay: baselineReceiveCPU.softirq, IncidentDisplay: incidentReceiveCPU.softirq},
 		{Name: "top NET_RX CPU busy", BaselineDisplay: baselineReceiveCPU.busy, IncidentDisplay: incidentReceiveCPU.busy},
@@ -434,4 +435,12 @@ func interfaceErrorsDelta(r model.Recording) uint64 {
 		return 0
 	}
 	return delta(last.RXErrors, first.RXErrors) + delta(last.TXErrors, first.TXErrors)
+}
+
+func tcpReceiveQueueDisplay(r model.Recording) string {
+	if len(r.Samples) == 0 {
+		return "unavailable"
+	}
+	last := r.Samples[len(r.Samples)-1].TCPSockets
+	return fmt.Sprintf("%d B, %d sockets non-zero", last.RXQueue, last.NonZeroRXSockets)
 }
