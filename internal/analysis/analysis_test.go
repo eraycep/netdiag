@@ -32,12 +32,12 @@ func TestAnalyzeRetransmissions(t *testing.T) {
 func TestAnalyzeRetransmissionsWithEnabledEBPFFeatureMetadata(t *testing.T) {
 	r := retransmissionRecordingWithFeatures([]model.EBPFFeatureStatus{
 		{
-			Name:            "tcp_retransmit_events",
+			Name:            model.EBPFFeatureTCPRetransmitEvents,
 			Status:          model.CollectorEnabled,
 			VisibilityScope: "host-wide TCP retransmission events",
 		},
 		{
-			Name:            "tcp_retransmit_ipv4_flows",
+			Name:            model.EBPFFeatureTCPRetransmitIPv4Flows,
 			Status:          model.CollectorEnabled,
 			VisibilityScope: "bounded IPv4 TCP retransmission flow counters",
 		},
@@ -63,13 +63,13 @@ func TestAnalyzeRetransmissionsReportsUnavailableEBPFFeatures(t *testing.T) {
 		Version: model.FormatVersion,
 		EBPFFeatures: []model.EBPFFeatureStatus{
 			{
-				Name:            "tcp_retransmit_events",
+				Name:            model.EBPFFeatureTCPRetransmitEvents,
 				Status:          model.CollectorUnavailable,
 				VisibilityScope: "host-wide TCP retransmission events",
 				Reason:          "load tcp retransmit programs: permission denied",
 			},
 			{
-				Name:            "tcp_retransmit_ipv4_flows",
+				Name:            model.EBPFFeatureTCPRetransmitIPv4Flows,
 				Status:          model.CollectorUnavailable,
 				VisibilityScope: "bounded IPv4 TCP retransmission flow counters",
 				Reason:          "load tcp retransmit programs: permission denied",
@@ -106,12 +106,12 @@ func TestAnalyzeRetransmissionsReportsDisabledEBPFFeatures(t *testing.T) {
 		Version: model.FormatVersion,
 		EBPFFeatures: []model.EBPFFeatureStatus{
 			{
-				Name:            "tcp_retransmit_events",
+				Name:            model.EBPFFeatureTCPRetransmitEvents,
 				Status:          model.CollectorDisabled,
 				VisibilityScope: "host-wide TCP retransmission events",
 			},
 			{
-				Name:            "tcp_retransmit_ipv4_flows",
+				Name:            model.EBPFFeatureTCPRetransmitIPv4Flows,
 				Status:          model.CollectorDisabled,
 				VisibilityScope: "bounded IPv4 TCP retransmission flow counters",
 			},
@@ -214,7 +214,7 @@ func TestAnalyzeRetransmissionsIncludesEBPFFeatureErrors(t *testing.T) {
 			EBPF: &model.EBPFStats{
 				TCPRetransmitEvents: 35,
 				FeatureErrors: []model.EBPFFeatureError{
-					{Name: "tcp_retransmit_ipv4_flows", Error: "iterate tcp retransmit flow map: permission denied"},
+					{Name: model.EBPFFeatureTCPRetransmitIPv4Flows, Error: "iterate tcp retransmit flow map: permission denied"},
 				},
 			},
 		},

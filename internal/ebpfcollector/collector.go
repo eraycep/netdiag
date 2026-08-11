@@ -19,11 +19,11 @@ type Collector struct {
 
 var featureDefinitions = []model.EBPFFeatureStatus{
 	{
-		Name:            "tcp_retransmit_events",
+		Name:            model.EBPFFeatureTCPRetransmitEvents,
 		VisibilityScope: "host-wide TCP retransmission events",
 	},
 	{
-		Name:            "tcp_retransmit_ipv4_flows",
+		Name:            model.EBPFFeatureTCPRetransmitIPv4Flows,
 		VisibilityScope: "bounded IPv4 TCP retransmission flow counters",
 	},
 }
@@ -64,7 +64,7 @@ func (c *Collector) Sample(maxFlows int) (model.EBPFStats, error) {
 		return model.EBPFStats{
 			TCPRetransmitEvents: count,
 			FeatureErrors: []model.EBPFFeatureError{
-				{Name: "tcp_retransmit_ipv4_flows", Error: err.Error()},
+				{Name: model.EBPFFeatureTCPRetransmitIPv4Flows, Error: err.Error()},
 			},
 		}, nil
 	}

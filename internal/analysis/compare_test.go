@@ -268,7 +268,7 @@ func TestCompareRetransmitFlowDisplayUnavailableAndNone(t *testing.T) {
 func TestCompareReportsIncidentOnlyEBPFFeatureErrors(t *testing.T) {
 	baseline := comparisonFeatureErrorRecording(nil)
 	incident := comparisonFeatureErrorRecording([]model.EBPFFeatureError{
-		{Name: "tcp_retransmit_ipv4_flows", Error: "iterate tcp retransmit flow map: permission denied"},
+		{Name: model.EBPFFeatureTCPRetransmitIPv4Flows, Error: "iterate tcp retransmit flow map: permission denied"},
 	})
 
 	comparison, err := Compare(baseline, incident)
@@ -285,10 +285,10 @@ func TestCompareReportsIncidentOnlyEBPFFeatureErrors(t *testing.T) {
 
 func TestCompareReportsBothSideEBPFFeatureErrors(t *testing.T) {
 	baseline := comparisonFeatureErrorRecording([]model.EBPFFeatureError{
-		{Name: "tcp_retransmit_ipv4_flows", Error: "baseline map read failed"},
+		{Name: model.EBPFFeatureTCPRetransmitIPv4Flows, Error: "baseline map read failed"},
 	})
 	incident := comparisonFeatureErrorRecording([]model.EBPFFeatureError{
-		{Name: "tcp_retransmit_ipv4_flows", Error: "incident map read failed"},
+		{Name: model.EBPFFeatureTCPRetransmitIPv4Flows, Error: "incident map read failed"},
 	})
 
 	comparison, err := Compare(baseline, incident)

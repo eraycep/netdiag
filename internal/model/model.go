@@ -4,6 +4,11 @@ import "time"
 
 const FormatVersion = 12
 
+const (
+	EBPFFeatureTCPRetransmitEvents    = "tcp_retransmit_events"
+	EBPFFeatureTCPRetransmitIPv4Flows = "tcp_retransmit_ipv4_flows"
+)
+
 type CollectorStatus string
 
 const (

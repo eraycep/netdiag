@@ -47,7 +47,7 @@ func Analyze(r model.Recording) ([]Finding, error) {
 			evidence := []string{fmt.Sprintf("%d retransmitted of %d outbound TCP segments (%.2f%%)", retrans, out, ratio*100)}
 			if !resets.ebpf && first.EBPF != nil && last.EBPF != nil {
 				events := delta(last.EBPF.TCPRetransmitEvents, first.EBPF.TCPRetransmitEvents)
-				feature, found := findEBPFFeature(r, "tcp_retransmit_events")
+				feature, found := findEBPFFeature(r, model.EBPFFeatureTCPRetransmitEvents)
 				if !found || feature.Status == model.CollectorEnabled {
 					evidence = append(evidence, fmt.Sprintf("eBPF observed %d tcp_retransmit_skb tracepoint events", events))
 				}
@@ -55,8 +55,8 @@ func Analyze(r model.Recording) ([]Finding, error) {
 				evidence = append(evidence, tcpRetransmitFlowEvidence(last.EBPF)...)
 				evidence = append(evidence, ebpfFeatureErrorEvidence(last.EBPF)...)
 			}
-			evidence = append(evidence, ebpfFeatureVisibilityEvidence(r, "tcp_retransmit_events")...)
-			evidence = append(evidence, ebpfFeatureVisibilityEvidence(r, "tcp_retransmit_ipv4_flows")...)
+			evidence = append(evidence, ebpfFeatureVisibilityEvidence(r, model.EBPFFeatureTCPRetransmitEvents)...)
+			evidence = append(evidence, ebpfFeatureVisibilityEvidence(r, model.EBPFFeatureTCPRetransmitIPv4Flows)...)
 			findings = append(findings, Finding{
 				Severity: "warning", Confidence: "strong correlation",
 				Summary:  "TCP retransmissions were elevated during the capture",

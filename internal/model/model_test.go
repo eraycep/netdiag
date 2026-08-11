@@ -96,7 +96,7 @@ func TestEBPFStatsJSONIncludesFeatureErrors(t *testing.T) {
 	want := EBPFStats{
 		TCPRetransmitEvents: 9,
 		FeatureErrors: []EBPFFeatureError{
-			{Name: "tcp_retransmit_ipv4_flows", Error: "iterate tcp retransmit flow map: permission denied"},
+			{Name: EBPFFeatureTCPRetransmitIPv4Flows, Error: "iterate tcp retransmit flow map: permission denied"},
 		},
 	}
 
@@ -206,7 +206,7 @@ func TestSampleJSONIncludesProcessStats(t *testing.T) {
 
 func TestEBPFFeatureStatusJSONOmitsEmptyReason(t *testing.T) {
 	feature := EBPFFeatureStatus{
-		Name:            "tcp_retransmit_events",
+		Name:            EBPFFeatureTCPRetransmitEvents,
 		Status:          CollectorEnabled,
 		VisibilityScope: "host-wide TCP retransmission events",
 	}
@@ -228,7 +228,7 @@ func TestRecordingJSONIncludesEBPFFeatures(t *testing.T) {
 		Version: FormatVersion,
 		EBPFFeatures: []EBPFFeatureStatus{
 			{
-				Name:            "tcp_retransmit_ipv4_flows",
+				Name:            EBPFFeatureTCPRetransmitIPv4Flows,
 				Status:          CollectorUnavailable,
 				VisibilityScope: "bounded IPv4 TCP retransmission flow counters",
 				Reason:          "permission denied",
