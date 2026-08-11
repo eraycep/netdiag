@@ -307,6 +307,51 @@ func TestAnalyzeIgnoresDecreasedTCPSocketTransmitQueue(t *testing.T) {
 	assertNoTCPSocketQueueFinding(t, r)
 }
 
+func TestAnalyzeReportsProcessRunqueueWaitGrowth(t *testing.T) {
+	r := processSchedstatRecording(
+		model.ProcessStats{PID: 123, RuntimeNanos: uint64(100 * time.Millisecond), RunqueueWaitNanos: uint64(5 * time.Millisecond), Timeslices: 10},
+		model.ProcessStats{PID: 123, RuntimeNanos: uint64(175 * time.Millisecond), RunqueueWaitNanos: uint64(20 * time.Millisecond), Timeslices: 13},
+	)
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if findings[0].Summary != "Selected process accumulated runqueue wait time" {
+		t.Fatalf("finding summary = %q", findings[0].Summary)
+	}
+	if findings[0].Severity != "warning" || findings[0].Confidence != "possible" {
+		t.Fatalf("finding severity/confidence = %s/%s", findings[0].Severity, findings[0].Confidence)
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	for _, want := range []string{
+		"process 123 runqueue wait increased by 15.0 ms",
+		"process 123 ran for 75.0 ms across 3 timeslices",
+	} {
+		if !strings.Contains(evidence, want) {
+			t.Fatalf("missing process schedstat evidence %q: %s", want, evidence)
+		}
+	}
+}
+
+func TestAnalyzeIgnoresSmallProcessRunqueueWaitGrowth(t *testing.T) {
+	r := processSchedstatRecording(
+		model.ProcessStats{PID: 123, RuntimeNanos: uint64(100 * time.Millisecond), RunqueueWaitNanos: uint64(5 * time.Millisecond), Timeslices: 10},
+		model.ProcessStats{PID: 123, RuntimeNanos: uint64(175 * time.Millisecond), RunqueueWaitNanos: uint64(9 * time.Millisecond), Timeslices: 13},
+	)
+	assertNoProcessSchedstatFinding(t, r)
+}
+
+func TestAnalyzeIgnoresMissingProcessSchedstat(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second)},
+		{Timestamp: now.Add(time.Second), ElapsedNanos: int64(2 * time.Second)},
+	}}
+	assertNoProcessSchedstatFinding(t, r)
+}
+
 func TestAnalyzeRejectsShortRecording(t *testing.T) {
 	_, err := Analyze(model.Recording{Version: model.FormatVersion, Samples: []model.Sample{{}}})
 	if err == nil {
@@ -832,6 +877,35 @@ func assertNoTCPSocketQueueFinding(t *testing.T, r model.Recording) {
 		if finding.Summary == "TCP socket receive queues grew during the capture" ||
 			finding.Summary == "TCP socket transmit queues grew during the capture" {
 			t.Fatalf("unexpected TCP socket queue finding: %+v", findings)
+		}
+	}
+}
+
+func processSchedstatRecording(firstProcess, lastProcess model.ProcessStats) model.Recording {
+	now := time.Now()
+	return model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{
+			Timestamp:    now,
+			ElapsedNanos: int64(time.Second),
+			Process:      &firstProcess,
+		},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			Process:      &lastProcess,
+		},
+	}}
+}
+
+func assertNoProcessSchedstatFinding(t *testing.T, r model.Recording) {
+	t.Helper()
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range findings {
+		if finding.Summary == "Selected process accumulated runqueue wait time" {
+			t.Fatalf("unexpected process schedstat finding: %+v", findings)
 		}
 	}
 }

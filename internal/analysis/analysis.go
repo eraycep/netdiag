@@ -82,6 +82,9 @@ func Analyze(r model.Recording) ([]Finding, error) {
 	if finding, ok := analyzeTCPTransmitSocketQueues(first, last); ok {
 		findings = append(findings, finding)
 	}
+	if finding, ok := analyzeProcessSchedstat(first, last); ok {
+		findings = append(findings, finding)
+	}
 	if !resets.qdisc {
 		if finding, ok := analyzeQdiscDrops(first, last); ok {
 			findings = append(findings, finding)
@@ -182,6 +185,33 @@ func analyzeTCPTransmitSocketQueues(first, last model.Sample) (Finding, bool) {
 		Summary:    "TCP socket transmit queues grew during the capture",
 		Evidence:   evidence,
 		NextStep:   "Check whether the peer, network path, or send buffer backpressure prevented data from draining.",
+	}, true
+}
+
+func analyzeProcessSchedstat(first, last model.Sample) (Finding, bool) {
+	if first.Process == nil || last.Process == nil {
+		return Finding{}, false
+	}
+	if last.Process.RunqueueWaitNanos <= first.Process.RunqueueWaitNanos {
+		return Finding{}, false
+	}
+
+	waitDelta := last.Process.RunqueueWaitNanos - first.Process.RunqueueWaitNanos
+	runtimeDelta := delta(last.Process.RuntimeNanos, first.Process.RuntimeNanos)
+	timeslicesDelta := delta(last.Process.Timeslices, first.Process.Timeslices)
+	if waitDelta < minProcessRunqueueWaitGrowth || timeslicesDelta == 0 {
+		return Finding{}, false
+	}
+
+	return Finding{
+		Severity:   "warning",
+		Confidence: "possible",
+		Summary:    "Selected process accumulated runqueue wait time",
+		Evidence: []string{
+			fmt.Sprintf("process %d runqueue wait increased by %.1f ms", last.Process.PID, nanosToMillis(waitDelta)),
+			fmt.Sprintf("process %d ran for %.1f ms across %d timeslices", last.Process.PID, nanosToMillis(runtimeDelta), timeslicesDelta),
+		},
+		NextStep: "Check CPU saturation, scheduler pressure, and whether this process shares CPUs with softirq or IRQ handling.",
 	}, true
 }
 
@@ -286,9 +316,14 @@ func qdiscKey(qdisc model.QdiscLineStats) string {
 const (
 	minNetRXSoftIRQDelta          = uint64(1000)
 	minTCPSocketQueueGrowth       = uint64(64 * 1024)
+	minProcessRunqueueWaitGrowth  = uint64(10 * time.Millisecond)
 	receiveConcentrationThreshold = 0.80
 	cpuBusyThreshold              = 0.70
 )
+
+func nanosToMillis(nanos uint64) float64 {
+	return float64(nanos) / float64(time.Millisecond)
+}
 
 func analyzeReceiveCPUConcentration(first, last model.Sample) (Finding, bool) {
 	softirqDeltas, totalNetRX, ok := softIRQNetRXDeltas(first.SoftIRQ, last.SoftIRQ)
