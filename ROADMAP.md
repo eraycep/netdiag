@@ -175,14 +175,15 @@ Implemented:
 - [x] Reproducible loopback TCP receive-queue experiment.
 - [x] Optional selected-process scheduler counter collection from
   `/proc/<pid>/schedstat`.
+- [x] Conservative selected-process scheduler delay finding from
+  `/proc/<pid>/schedstat`.
+- [x] Reproducible selected-process scheduler-delay experiment.
 
 Remaining:
 
 - Expand the CO-RE eBPF collector with feature detection and graceful
   degradation beyond the initial host-wide tracepoint counter.
 - Track connect latency, RTT, congestion state and per-flow socket attribution.
-- Analyze selected-process scheduler delay and correlate it with network
-  symptoms.
 - Correlate flow events without retaining payloads.
 - Add broader capture budgets, sampling and cardinality controls for future
   eBPF event types.

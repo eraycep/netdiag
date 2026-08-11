@@ -27,6 +27,7 @@ kernel-path attribution.
 - Root-enabled eBPF integration test for controlled TCP retransmissions
 - Reproducible packet-loss experiment using an isolated network namespace
 - Reproducible CPU-contention experiment for receive-path concentration
+- Reproducible selected-process scheduler-delay experiment
 - Capture-overhead benchmark scripts
 
 ## Build and run

@@ -1,4 +1,4 @@
-.PHONY: build test test-integration experiment-loss experiment-cpu-contention experiment-qdisc-drop experiment-rx-queue benchmark benchmark-ebpf benchmark-workload-impact fmt generate
+.PHONY: build test test-integration experiment-loss experiment-cpu-contention experiment-qdisc-drop experiment-rx-queue experiment-process-sched-delay benchmark benchmark-ebpf benchmark-workload-impact fmt generate
 
 build:
 	go build -buildvcs=false -o bin/netdiag ./cmd/netdiag
@@ -24,6 +24,9 @@ experiment-qdisc-drop: build
 
 experiment-rx-queue: build
 	NETDIAG_BIN="$(CURDIR)/bin/netdiag" bash experiments/tcp-rx-queue.sh "$(CURDIR)"
+
+experiment-process-sched-delay: build
+	NETDIAG_BIN="$(CURDIR)/bin/netdiag" WORKLOAD_BIN="$(CURDIR)/bin/netdiag-workload" bash experiments/process-sched-delay.sh "$(CURDIR)"
 
 benchmark: build
 	NETDIAG_BIN="$(CURDIR)/bin/netdiag" bash benchmarks/capture-overhead.sh
