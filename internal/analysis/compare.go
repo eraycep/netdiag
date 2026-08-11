@@ -165,7 +165,7 @@ func compareKeyDeltas(baseline, incident model.Recording) []KeyDeltaChange {
 	incidentReceiveCPU := receiveCPUDeltaDisplay(incident)
 	retransmitFlows := retransmitFlowDeltaDisplay(baseline, incident)
 
-	return []KeyDeltaChange{
+	changes := []KeyDeltaChange{
 		{Name: "TCP retransmits", BaselineDisplay: tcpRetransmitDeltaDisplay(baseline), IncidentDisplay: tcpRetransmitDeltaDisplay(incident)},
 		{Name: "TCP receive queue", BaselineDisplay: tcpReceiveQueueDisplay(baseline), IncidentDisplay: tcpReceiveQueueDisplay(incident)},
 		{Name: "TCP transmit queue", BaselineDisplay: tcpTransmitQueueDisplay(baseline), IncidentDisplay: tcpTransmitQueueDisplay(incident)},
@@ -180,6 +180,18 @@ func compareKeyDeltas(baseline, incident model.Recording) []KeyDeltaChange {
 		{Name: "interface drops", BaselineDisplay: uintDeltaDisplay(interfaceDropsDelta(baseline)), IncidentDisplay: uintDeltaDisplay(interfaceDropsDelta(incident))},
 		{Name: "interface errors", BaselineDisplay: uintDeltaDisplay(interfaceErrorsDelta(baseline)), IncidentDisplay: uintDeltaDisplay(interfaceErrorsDelta(incident))},
 	}
+
+	baselineFeatureErrors := ebpfFeatureErrorsDisplay(baseline)
+	incidentFeatureErrors := ebpfFeatureErrorsDisplay(incident)
+	if baselineFeatureErrors != "none" || incidentFeatureErrors != "none" {
+		changes = append(changes, KeyDeltaChange{
+			Name:            "eBPF feature errors",
+			BaselineDisplay: baselineFeatureErrors,
+			IncidentDisplay: incidentFeatureErrors,
+		})
+	}
+
+	return changes
 }
 
 type retransmitFlowComparisonDisplay struct {
@@ -215,6 +227,34 @@ func lastEBPFStats(r model.Recording) (*model.EBPFStats, bool) {
 		return nil, false
 	}
 	return stats, true
+}
+
+func ebpfFeatureErrorsDisplay(r model.Recording) string {
+	stats, ok := lastEBPFStats(r)
+	if !ok || stats == nil || len(stats.FeatureErrors) == 0 {
+		return "none"
+	}
+
+	errors := append([]model.EBPFFeatureError(nil), stats.FeatureErrors...)
+	sort.Slice(errors, func(i, j int) bool {
+		if errors[i].Name != errors[j].Name {
+			return errors[i].Name < errors[j].Name
+		}
+		return errors[i].Error < errors[j].Error
+	})
+
+	parts := make([]string, 0, len(errors))
+	for _, featureError := range errors {
+		if featureError.Name == "" || featureError.Error == "" {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s: %s", featureError.Name, featureError.Error))
+	}
+	if len(parts) == 0 {
+		return "none"
+	}
+
+	return strings.Join(parts, "; ")
 }
 
 func retransmitFlowComparisonKeys(baseline *model.EBPFStats, baselineOK bool, incident *model.EBPFStats, incidentOK bool, limit int) []retransmitFlowKey {

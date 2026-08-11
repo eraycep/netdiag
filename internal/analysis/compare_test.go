@@ -265,6 +265,59 @@ func TestCompareRetransmitFlowDisplayUnavailableAndNone(t *testing.T) {
 	}
 }
 
+func TestCompareReportsIncidentOnlyEBPFFeatureErrors(t *testing.T) {
+	baseline := comparisonFeatureErrorRecording(nil)
+	incident := comparisonFeatureErrorRecording([]model.EBPFFeatureError{
+		{Name: "tcp_retransmit_ipv4_flows", Error: "iterate tcp retransmit flow map: permission denied"},
+	})
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	want := "- eBPF feature errors: none -> tcp_retransmit_ipv4_flows: iterate tcp retransmit flow map: permission denied"
+	if !strings.Contains(rendered, want) {
+		t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+	}
+}
+
+func TestCompareReportsBothSideEBPFFeatureErrors(t *testing.T) {
+	baseline := comparisonFeatureErrorRecording([]model.EBPFFeatureError{
+		{Name: "tcp_retransmit_ipv4_flows", Error: "baseline map read failed"},
+	})
+	incident := comparisonFeatureErrorRecording([]model.EBPFFeatureError{
+		{Name: "tcp_retransmit_ipv4_flows", Error: "incident map read failed"},
+	})
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	want := "- eBPF feature errors: tcp_retransmit_ipv4_flows: baseline map read failed -> tcp_retransmit_ipv4_flows: incident map read failed"
+	if !strings.Contains(rendered, want) {
+		t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+	}
+}
+
+func TestCompareOmitsEBPFFeatureErrorsWhenBothSidesClean(t *testing.T) {
+	baseline := comparisonFeatureErrorRecording(nil)
+	incident := comparisonFeatureErrorRecording(nil)
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	if strings.Contains(rendered, "eBPF feature errors") {
+		t.Fatalf("rendered comparison unexpectedly included eBPF feature errors:\n%s", rendered)
+	}
+}
+
 func TestReceiveCPUDeltaDisplayHandlesMissingCPUStats(t *testing.T) {
 	r := receiveCPUComparisonRecording(
 		[]model.SoftIRQCPUStats{{CPU: 0, NetRX: 100}, {CPU: 1, NetRX: 100}},
@@ -374,6 +427,22 @@ func comparisonNoEBPFRecording() model.Recording {
 	return model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
 		{Timestamp: now, ElapsedNanos: int64(time.Second)},
 		{Timestamp: now.Add(time.Second), ElapsedNanos: int64(2 * time.Second)},
+	}}
+}
+
+func comparisonFeatureErrorRecording(featureErrors []model.EBPFFeatureError) model.Recording {
+	now := time.Now()
+	return model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{
+			Timestamp:    now,
+			ElapsedNanos: int64(time.Second),
+			EBPF:         &model.EBPFStats{},
+		},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			EBPF:         &model.EBPFStats{FeatureErrors: featureErrors},
+		},
 	}}
 }
 

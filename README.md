@@ -187,7 +187,9 @@ misread without traffic volume, and TCP socket queue deltas show the final
 aggregate queue sizes and non-empty socket counts. Captures recorded with
 `--pid` also include selected-process scheduler deltas. When both captures
 include eBPF retransmit flow data, the comparison also shows the top IPv4 flow
-tuples and whether a flow list was truncated by `--max-ebpf-flows`.
+tuples and whether a flow list was truncated by `--max-ebpf-flows`. If an eBPF
+feature reports sample-level errors in either capture, compare includes an
+`eBPF feature errors` row.
 
 Example:
 
