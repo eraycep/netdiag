@@ -178,6 +178,8 @@ Implemented:
 - [x] Conservative selected-process scheduler delay finding from
   `/proc/<pid>/schedstat`.
 - [x] Reproducible selected-process scheduler-delay experiment.
+- [x] Per-sample eBPF feature errors when per-flow retransmit map reads
+  degrade while host-wide retransmit counting remains available.
 
 Remaining:
 

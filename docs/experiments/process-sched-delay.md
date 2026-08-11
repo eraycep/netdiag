@@ -95,6 +95,47 @@ network latency regression by itself; it identifies a local scheduling signal
 that should be checked against request latency, CPU saturation, softirq
 placement and IRQ affinity.
 
+## Validated run
+
+On August 11, 2026, the experiment was run on the development host with the
+default settings:
+
+```text
+TARGET_CPU=1
+BASELINE_CLIENT_CPU=0
+IMPAIRED_CLIENT_CPU=1
+DURATION=20s
+CLIENT_DURATION=18s
+BASELINE_CONCURRENCY=4
+IMPAIRED_CONCURRENCY=32
+PAYLOAD_BYTES=1048576
+```
+
+The baseline run did not report the selected-process scheduler-delay finding:
+
+```text
+HTTP requests: 64563 succeeded, 0 failed
+Latency milliseconds: p50=1.318 p95=1.550 p99=1.767
+```
+
+The impaired run pinned the selected server process, client and CPU burner to
+CPU1. It reported the intended finding:
+
+```text
+HTTP requests: 27364 succeeded, 0 failed
+Latency milliseconds: p50=20.772 p95=33.534 p99=40.420
+Finding 3: Selected process accumulated runqueue wait time
+Confidence: possible
+Severity: warning
+Evidence: process 126071 runqueue wait increased by 10.4 ms
+Evidence: process 126071 ran for 1.2 ms across 9 timeslices
+Next step: Check CPU saturation, scheduler pressure, and whether this process shares CPUs with softirq or IRQ handling.
+```
+
+The same impaired run also reported TCP socket queue growth. That is expected
+for this synthetic workload under contention; the scheduler-delay finding is
+the validation target.
+
 ## Cleanup and safety
 
 The script cleans up the recorder, workload server and CPU burner on normal

@@ -203,6 +203,34 @@ func TestAnalyzeRetransmissionsIncludesFlowTruncationEvidence(t *testing.T) {
 	}
 }
 
+func TestAnalyzeRetransmissionsIncludesEBPFFeatureErrors(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second), TCP: model.TCPStats{OutSegments: 1000, Retransmits: 10}, EBPF: &model.EBPFStats{TCPRetransmitEvents: 5}},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			TCP:          model.TCPStats{OutSegments: 2000, Retransmits: 40},
+			EBPF: &model.EBPFStats{
+				TCPRetransmitEvents: 35,
+				FeatureErrors: []model.EBPFFeatureError{
+					{Name: "tcp_retransmit_ipv4_flows", Error: "iterate tcp retransmit flow map: permission denied"},
+				},
+			},
+		},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	want := "eBPF tcp_retransmit_ipv4_flows sample error: iterate tcp retransmit flow map: permission denied"
+	if !strings.Contains(evidence, want) {
+		t.Fatalf("missing eBPF feature error evidence %q: %s", want, evidence)
+	}
+}
+
 func TestAnalyzeReportsTCPSocketReceiveQueueGrowth(t *testing.T) {
 	now := time.Now()
 	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{

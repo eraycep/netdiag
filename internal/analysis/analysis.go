@@ -53,6 +53,7 @@ func Analyze(r model.Recording) ([]Finding, error) {
 				}
 
 				evidence = append(evidence, tcpRetransmitFlowEvidence(last.EBPF)...)
+				evidence = append(evidence, ebpfFeatureErrorEvidence(last.EBPF)...)
 			}
 			evidence = append(evidence, ebpfFeatureVisibilityEvidence(r, "tcp_retransmit_events")...)
 			evidence = append(evidence, ebpfFeatureVisibilityEvidence(r, "tcp_retransmit_ipv4_flows")...)
@@ -132,6 +133,20 @@ func tcpRetransmitFlowEvidence(stats *model.EBPFStats) []string {
 			len(stats.TCPRetransmitFlows),
 			stats.TCPRetransmitFlowCount,
 		))
+	}
+	return evidence
+}
+
+func ebpfFeatureErrorEvidence(stats *model.EBPFStats) []string {
+	if stats == nil || len(stats.FeatureErrors) == 0 {
+		return nil
+	}
+	evidence := make([]string, 0, len(stats.FeatureErrors))
+	for _, featureError := range stats.FeatureErrors {
+		if featureError.Name == "" || featureError.Error == "" {
+			continue
+		}
+		evidence = append(evidence, fmt.Sprintf("eBPF %s sample error: %s", featureError.Name, featureError.Error))
 	}
 	return evidence
 }

@@ -92,6 +92,40 @@ func TestEBPFStatsJSONIncludesRetransmitFlows(t *testing.T) {
 	}
 }
 
+func TestEBPFStatsJSONIncludesFeatureErrors(t *testing.T) {
+	want := EBPFStats{
+		TCPRetransmitEvents: 9,
+		FeatureErrors: []EBPFFeatureError{
+			{Name: "tcp_retransmit_ipv4_flows", Error: "iterate tcp retransmit flow map: permission denied"},
+		},
+	}
+
+	data, err := json.Marshal(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{
+		"tcp_retransmit_events",
+		"feature_errors",
+		"tcp_retransmit_ipv4_flows",
+		"iterate tcp retransmit flow map: permission denied",
+	} {
+		if !strings.Contains(string(data), field) {
+			t.Fatalf("serialized eBPF stats missing %q: %s", field, data)
+		}
+	}
+
+	var got EBPFStats
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.TCPRetransmitEvents != want.TCPRetransmitEvents ||
+		len(got.FeatureErrors) != 1 ||
+		got.FeatureErrors[0] != want.FeatureErrors[0] {
+		t.Fatalf("round trip mismatch: got %+v, want %+v", got, want)
+	}
+}
+
 func TestSampleJSONIncludesTCPSocketStats(t *testing.T) {
 	want := Sample{
 		TCPSockets: TCPSocketStats{

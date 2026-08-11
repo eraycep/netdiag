@@ -59,8 +59,14 @@ func (c *Collector) Sample(maxFlows int) (model.EBPFStats, error) {
 	flows, err := c.TCPRetransmitFlows()
 	if err != nil {
 		// Per-flow attribution is best-effort. Keep the host-wide eBPF signal
-		// available if the flow map cannot be read.
-		return model.EBPFStats{TCPRetransmitEvents: count}, nil
+		// available if the flow map cannot be read, and make the degraded
+		// per-flow feature visible in the sample.
+		return model.EBPFStats{
+			TCPRetransmitEvents: count,
+			FeatureErrors: []model.EBPFFeatureError{
+				{Name: "tcp_retransmit_ipv4_flows", Error: err.Error()},
+			},
+		}, nil
 	}
 	limitedFlows, flowCount, truncated := limitRetransmitFlows(flows, maxFlows)
 

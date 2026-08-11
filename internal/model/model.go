@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-const FormatVersion = 11
+const FormatVersion = 12
 
 type CollectorStatus string
 
@@ -156,6 +156,12 @@ type EBPFStats struct {
 	TCPRetransmitFlows          []TCPRetransmitFlow `json:"tcp_retransmit_flows,omitempty"`
 	TCPRetransmitFlowsTruncated bool                `json:"tcp_retransmit_flows_truncated,omitempty"`
 	TCPRetransmitFlowCount      int                 `json:"tcp_retransmit_flow_count,omitempty"`
+	FeatureErrors               []EBPFFeatureError  `json:"feature_errors,omitempty"`
+}
+
+type EBPFFeatureError struct {
+	Name  string `json:"name"`
+	Error string `json:"error"`
 }
 
 type EBPFFeatureStatus struct {
