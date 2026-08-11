@@ -128,6 +128,51 @@ func TestCompareReportsTCPTransmitQueueSignalChanges(t *testing.T) {
 	}
 }
 
+func TestCompareReportsProcessSchedstatSignalChanges(t *testing.T) {
+	baseline := processComparisonRecording(&model.ProcessStats{
+		RuntimeNanos:      1000000,
+		RunqueueWaitNanos: 200000,
+		Timeslices:        10,
+	})
+	incident := processComparisonRecording(&model.ProcessStats{
+		RuntimeNanos:      2500000,
+		RunqueueWaitNanos: 1800000,
+		Timeslices:        25,
+	})
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	for _, want := range []string{
+		"- process runtime: 1000000 ns -> 2500000 ns",
+		"- process runqueue wait: 200000 ns -> 1800000 ns",
+		"- process timeslices: 10 -> 25",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+		}
+	}
+}
+
+func TestCompareReportsProcessSchedstatUnavailable(t *testing.T) {
+	baseline := processComparisonRecording(nil)
+	incident := processComparisonRecording(nil)
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	want := "- process runtime: unavailable -> unavailable"
+	if !strings.Contains(rendered, want) {
+		t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+	}
+}
+
 func TestCompareReportsIncidentOnlyRetransmitFlow(t *testing.T) {
 	baseline := comparisonFlowRecording(nil, false, 0)
 	incident := comparisonFlowRecording([]model.TCPRetransmitFlow{
@@ -288,6 +333,18 @@ func tcpSocketQueueComparisonRecording(rxQueue, nonZeroRXSockets, txQueue, nonZe
 				TXQueue:          txQueue,
 				NonZeroTXSockets: nonZeroTXSockets,
 			},
+		},
+	}}
+}
+
+func processComparisonRecording(process *model.ProcessStats) model.Recording {
+	now := time.Now()
+	return model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second)},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			Process:      process,
 		},
 	}}
 }
