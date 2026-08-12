@@ -112,7 +112,7 @@ func record(args []string) error {
 			r.EBPFFeatures = ebpfcollector.UnavailableFeatures(err.Error())
 			fmt.Fprintf(os.Stderr, "netdiag: eBPF unavailable; continuing with host counters: %v\n", err)
 		} else {
-			r.EBPFFeatures = ebpfcollector.EnabledFeatures()
+			r.EBPFFeatures = bpfCollector.Features()
 			defer bpfCollector.Close()
 		}
 	}

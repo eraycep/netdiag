@@ -147,3 +147,41 @@ func TestFeatureStatusHelpersReturnFreshStatuses(t *testing.T) {
 		t.Fatalf("feature helper leaked mutable state: got %q, want %q", got, model.CollectorEnabled)
 	}
 }
+
+func TestCollectorFeaturesReturnsEnabledFeatureStatuses(t *testing.T) {
+	var collector Collector
+
+	features := collector.Features()
+
+	if len(features) != 2 {
+		t.Fatalf("feature count = %d, want 2", len(features))
+	}
+
+	wantNames := map[string]struct{}{
+		model.EBPFFeatureTCPRetransmitEvents:    {},
+		model.EBPFFeatureTCPRetransmitIPv4Flows: {},
+	}
+	for _, feature := range features {
+		if _, ok := wantNames[feature.Name]; !ok {
+			t.Fatalf("unexpected feature name: %+v", feature)
+		}
+		if feature.Status != model.CollectorEnabled {
+			t.Fatalf("feature %s status = %q, want %q", feature.Name, feature.Status, model.CollectorEnabled)
+		}
+		if feature.Reason != "" {
+			t.Fatalf("feature %s reason = %q, want empty", feature.Name, feature.Reason)
+		}
+		if feature.VisibilityScope == "" {
+			t.Fatalf("feature %s has empty visibility scope", feature.Name)
+		}
+		delete(wantNames, feature.Name)
+	}
+	if len(wantNames) != 0 {
+		t.Fatalf("missing feature names: %+v", wantNames)
+	}
+
+	features[0].Status = model.CollectorUnavailable
+	if got := collector.Features()[0].Status; got != model.CollectorEnabled {
+		t.Fatalf("collector features leaked mutable state: got %q, want %q", got, model.CollectorEnabled)
+	}
+}

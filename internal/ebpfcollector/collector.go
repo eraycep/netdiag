@@ -80,6 +80,10 @@ func (c *Collector) Close() error {
 	return errors.Join(c.link.Close(), c.objects.Close())
 }
 
+func (c *Collector) Features() []model.EBPFFeatureStatus {
+	return EnabledFeatures()
+}
+
 func ipv4String(addr uint32) string {
 	return net.IPv4(
 		byte(addr),
