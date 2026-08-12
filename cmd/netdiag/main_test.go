@@ -260,6 +260,69 @@ func TestRecordRejectsInvalidMaximumEBPFFlowCount(t *testing.T) {
 	}
 }
 
+func TestRecordRejectsInvalidMaximumEBPFFlowSampleCount(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "capture.json")
+	err := record([]string{"--max-ebpf-flow-samples=-2", "--ebpf=false", "--output=" + path})
+	if err == nil || !strings.Contains(err.Error(), "max ebpf flow samples must be -1 or greater") {
+		t.Fatalf("error = %v, want maximum eBPF flow sample validation error", err)
+	}
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("output was created for invalid configuration: %v", statErr)
+	}
+}
+
+func TestEBPFFlowSampleBudget(t *testing.T) {
+	budget := newEBPFFlowSampleBudget(1)
+
+	maxFlows, omitted := budget.maxFlows(128)
+	if maxFlows != 128 || omitted {
+		t.Fatalf("first budget decision = (%d, %v), want (128, false)", maxFlows, omitted)
+	}
+	stats := budget.apply(model.EBPFStats{
+		TCPRetransmitFlowCount: 1,
+		TCPRetransmitFlows:     []model.TCPRetransmitFlow{{SourceAddress: "127.0.0.1"}},
+	}, omitted)
+	if stats.TCPRetransmitFlowsOmittedReason != "" {
+		t.Fatalf("first sample omission reason = %q, want empty", stats.TCPRetransmitFlowsOmittedReason)
+	}
+
+	maxFlows, omitted = budget.maxFlows(128)
+	if maxFlows != 0 || !omitted {
+		t.Fatalf("exhausted budget decision = (%d, %v), want (0, true)", maxFlows, omitted)
+	}
+	stats = budget.apply(model.EBPFStats{
+		TCPRetransmitFlowCount:      3,
+		TCPRetransmitFlowsTruncated: true,
+	}, omitted)
+	if stats.TCPRetransmitFlowsOmittedReason != "recording eBPF flow sample budget exhausted" {
+		t.Fatalf("exhausted sample omission reason = %q", stats.TCPRetransmitFlowsOmittedReason)
+	}
+}
+
+func TestEBPFFlowSampleBudgetDoesNotConsumeEmptySamples(t *testing.T) {
+	budget := newEBPFFlowSampleBudget(1)
+
+	_, omitted := budget.maxFlows(128)
+	stats := budget.apply(model.EBPFStats{}, omitted)
+	if stats.TCPRetransmitFlowsOmittedReason != "" {
+		t.Fatalf("empty sample omission reason = %q, want empty", stats.TCPRetransmitFlowsOmittedReason)
+	}
+
+	maxFlows, omitted := budget.maxFlows(128)
+	if maxFlows != 128 || omitted {
+		t.Fatalf("budget after empty sample = (%d, %v), want (128, false)", maxFlows, omitted)
+	}
+}
+
+func TestEBPFFlowSampleBudgetDoesNotOverridePerSampleZeroLimit(t *testing.T) {
+	budget := newEBPFFlowSampleBudget(0)
+
+	maxFlows, omitted := budget.maxFlows(0)
+	if maxFlows != 0 || omitted {
+		t.Fatalf("zero per-sample flow limit = (%d, %v), want (0, false)", maxFlows, omitted)
+	}
+}
+
 func TestRecordRejectsInvalidPID(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "capture.json")
 	err := record([]string{"--pid=-1", "--ebpf=false", "--output=" + path})

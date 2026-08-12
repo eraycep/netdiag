@@ -180,6 +180,9 @@ Implemented:
 - [x] Reproducible selected-process scheduler-delay experiment.
 - [x] Per-sample eBPF feature errors when per-flow retransmit map reads
   degrade while host-wide retransmit counting remains available.
+- [x] eBPF collector-owned feature status API used by the recorder.
+- [x] Recording-wide eBPF per-flow serialization sample budget with visible
+  omission reason.
 
 Remaining:
 

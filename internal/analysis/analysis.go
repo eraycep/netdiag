@@ -108,7 +108,7 @@ func Analyze(r model.Recording) ([]Finding, error) {
 }
 
 func tcpRetransmitFlowEvidence(stats *model.EBPFStats) []string {
-	if stats == nil || len(stats.TCPRetransmitFlows) == 0 {
+	if stats == nil {
 		return nil
 	}
 
@@ -116,7 +116,7 @@ func tcpRetransmitFlowEvidence(stats *model.EBPFStats) []string {
 	if limit > 3 {
 		limit = 3
 	}
-	evidence := make([]string, 0, limit+1)
+	evidence := make([]string, 0, limit+2)
 	for _, flow := range stats.TCPRetransmitFlows[:limit] {
 		evidence = append(evidence, fmt.Sprintf(
 			"Top retransmitting IPv4 flow: %s:%d -> %s:%d had %d retransmits",
@@ -133,6 +133,9 @@ func tcpRetransmitFlowEvidence(stats *model.EBPFStats) []string {
 			len(stats.TCPRetransmitFlows),
 			stats.TCPRetransmitFlowCount,
 		))
+	}
+	if stats.TCPRetransmitFlowsOmittedReason != "" {
+		evidence = append(evidence, fmt.Sprintf("eBPF flow details omitted: %s", stats.TCPRetransmitFlowsOmittedReason))
 	}
 	return evidence
 }

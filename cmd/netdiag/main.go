@@ -62,6 +62,7 @@ func record(args []string) error {
 	useEBPF := fs.Bool("ebpf", true, "collect TCP retransmit tracepoint events when permitted")
 	maxSamples := fs.Int("max-samples", 3600, "maximum samples")
 	maxEBPFFlows := fs.Int("max-ebpf-flows", 128, "maximum eBPF per-flow entries to store per sample")
+	maxEBPFFlowSamples := fs.Int("max-ebpf-flow-samples", -1, "maximum samples that serialize eBPF per-flow entries; -1 means unlimited")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -100,6 +101,9 @@ func record(args []string) error {
 	if *maxEBPFFlows < 0 {
 		return errors.New("max ebpf flows must be non-negative")
 	}
+	if *maxEBPFFlowSamples < -1 {
+		return errors.New("max ebpf flow samples must be -1 or greater")
+	}
 
 	var bpfCollector *ebpfcollector.Collector
 	if *useEBPF {
@@ -127,6 +131,7 @@ func record(args []string) error {
 	irqCollectorActive := *iface != ""
 	qdiscCollectorActive := *iface != ""
 	processCollectorActive := *pid > 0
+	ebpfFlowBudget := newEBPFFlowSampleBudget(*maxEBPFFlowSamples)
 
 	for {
 		sample, err := c.Sample(*iface)
@@ -176,7 +181,8 @@ func record(args []string) error {
 		sampledAt := time.Now()
 
 		if bpfCollector != nil {
-			stats, err := bpfCollector.Sample(*maxEBPFFlows)
+			sampleMaxEBPFFlows, flowsOmittedByBudget := ebpfFlowBudget.maxFlows(*maxEBPFFlows)
+			stats, err := bpfCollector.Sample(sampleMaxEBPFFlows)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "netdiag: eBPF sampling failed; disabling collector: %v\n", err)
 				if updateErr := updateCollectorStatus(r.Collectors, "ebpf_tcp_retransmit", model.CollectorUnavailable, err.Error()); updateErr != nil {
@@ -186,6 +192,7 @@ func record(args []string) error {
 				_ = bpfCollector.Close()
 				bpfCollector = nil
 			} else {
+				stats = ebpfFlowBudget.apply(stats, flowsOmittedByBudget)
 				sample.EBPF = &stats
 			}
 		}
@@ -208,6 +215,38 @@ func record(args []string) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+type ebpfFlowSampleBudget struct {
+	remaining int
+	unlimited bool
+}
+
+func newEBPFFlowSampleBudget(maxSamples int) ebpfFlowSampleBudget {
+	return ebpfFlowSampleBudget{
+		remaining: maxSamples,
+		unlimited: maxSamples < 0,
+	}
+}
+
+func (b ebpfFlowSampleBudget) maxFlows(perSampleLimit int) (int, bool) {
+	if perSampleLimit == 0 || b.unlimited || b.remaining > 0 {
+		return perSampleLimit, false
+	}
+	return 0, true
+}
+
+func (b *ebpfFlowSampleBudget) apply(stats model.EBPFStats, omittedByBudget bool) model.EBPFStats {
+	if omittedByBudget {
+		if stats.TCPRetransmitFlowCount > 0 {
+			stats.TCPRetransmitFlowsOmittedReason = "recording eBPF flow sample budget exhausted"
+		}
+		return stats
+	}
+	if !b.unlimited && len(stats.TCPRetransmitFlows) > 0 {
+		b.remaining--
+	}
+	return stats
 }
 
 func writeRecording(path string, r model.Recording) error {

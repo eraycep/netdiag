@@ -203,6 +203,38 @@ func TestAnalyzeRetransmissionsIncludesFlowTruncationEvidence(t *testing.T) {
 	}
 }
 
+func TestAnalyzeRetransmissionsIncludesFlowOmissionReason(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second), TCP: model.TCPStats{OutSegments: 1000, Retransmits: 10}, EBPF: &model.EBPFStats{TCPRetransmitEvents: 5}},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			TCP:          model.TCPStats{OutSegments: 2000, Retransmits: 40},
+			EBPF: &model.EBPFStats{
+				TCPRetransmitEvents:             35,
+				TCPRetransmitFlowCount:          12,
+				TCPRetransmitFlowsTruncated:     true,
+				TCPRetransmitFlowsOmittedReason: "recording eBPF flow sample budget exhausted",
+			},
+		},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	for _, want := range []string{
+		"eBPF flow list truncated: showing 0 of 12 observed flow entries",
+		"eBPF flow details omitted: recording eBPF flow sample budget exhausted",
+	} {
+		if !strings.Contains(evidence, want) {
+			t.Fatalf("missing flow omission evidence %q: %s", want, evidence)
+		}
+	}
+}
+
 func TestAnalyzeRetransmissionsIncludesEBPFFeatureErrors(t *testing.T) {
 	now := time.Now()
 	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{

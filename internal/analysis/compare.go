@@ -328,6 +328,9 @@ func retransmitFlowSideDisplay(label string, stats *model.EBPFStats, ok bool, ke
 		}
 		display += fmt.Sprintf("; %s eBPF flow list truncated: showing %d of %d observed flow entries", label, len(stats.TCPRetransmitFlows), total)
 	}
+	if stats.TCPRetransmitFlowsOmittedReason != "" {
+		display += fmt.Sprintf("; %s eBPF flow details omitted: %s", label, stats.TCPRetransmitFlowsOmittedReason)
+	}
 	return display
 }
 

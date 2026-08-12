@@ -126,6 +126,42 @@ func TestEBPFStatsJSONIncludesFeatureErrors(t *testing.T) {
 	}
 }
 
+func TestEBPFStatsJSONIncludesRetransmitFlowsOmittedReason(t *testing.T) {
+	want := EBPFStats{
+		TCPRetransmitEvents:             9,
+		TCPRetransmitFlowCount:          12,
+		TCPRetransmitFlowsTruncated:     true,
+		TCPRetransmitFlowsOmittedReason: "recording eBPF flow sample budget exhausted",
+	}
+
+	data, err := json.Marshal(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{
+		"tcp_retransmit_events",
+		"tcp_retransmit_flow_count",
+		"tcp_retransmit_flows_truncated",
+		"tcp_retransmit_flows_omitted_reason",
+		"recording eBPF flow sample budget exhausted",
+	} {
+		if !strings.Contains(string(data), field) {
+			t.Fatalf("serialized eBPF stats missing %q: %s", field, data)
+		}
+	}
+
+	var got EBPFStats
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.TCPRetransmitEvents != want.TCPRetransmitEvents ||
+		got.TCPRetransmitFlowCount != want.TCPRetransmitFlowCount ||
+		got.TCPRetransmitFlowsTruncated != want.TCPRetransmitFlowsTruncated ||
+		got.TCPRetransmitFlowsOmittedReason != want.TCPRetransmitFlowsOmittedReason {
+		t.Fatalf("round trip mismatch: got %+v, want %+v", got, want)
+	}
+}
+
 func TestSampleJSONIncludesTCPSocketStats(t *testing.T) {
 	want := Sample{
 		TCPSockets: TCPSocketStats{

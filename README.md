@@ -91,6 +91,14 @@ Limit serialized eBPF per-flow retransmit entries:
 Use `--max-ebpf-flows=0` to keep the host-wide eBPF retransmission counter and
 flow-count metadata while omitting per-flow entries from each sample.
 
+Limit how many samples can serialize eBPF per-flow entries:
+
+```sh
+./bin/netdiag record --max-ebpf-flow-samples=10 --duration 30s --output capture.json
+```
+
+Use `--max-ebpf-flow-samples=-1` for the default unlimited sample budget.
+
 ## Recording behavior
 
 Recordings stop when either `--duration` or `--max-samples` is reached. The
@@ -112,9 +120,10 @@ wall-clock corrections cannot create invalid capture durations.
 
 eBPF per-flow retransmission entries are bounded twice: the kernel map uses an
 LRU cap, and the recorder serializes at most `--max-ebpf-flows` entries per
-sample. Samples include `tcp_retransmit_flow_count` and
-`tcp_retransmit_flows_truncated` when the flow map contains more entries than
-were serialized.
+sample. `--max-ebpf-flow-samples` can also limit how many samples serialize
+flow details during a recording. Samples include `tcp_retransmit_flow_count`,
+`tcp_retransmit_flows_truncated` and, when a recording-wide budget omits flow
+details, `tcp_retransmit_flows_omitted_reason`.
 
 ## Current signals
 

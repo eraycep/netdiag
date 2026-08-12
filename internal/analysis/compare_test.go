@@ -249,6 +249,27 @@ func TestCompareReportsRetransmitFlowTruncation(t *testing.T) {
 	}
 }
 
+func TestCompareReportsRetransmitFlowOmissionReason(t *testing.T) {
+	baseline := comparisonFlowRecording(nil, false, 0)
+	incident := comparisonFlowRecording(nil, true, 12)
+	incident.Samples[len(incident.Samples)-1].EBPF.TCPRetransmitFlowsOmittedReason = "recording eBPF flow sample budget exhausted"
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	for _, want := range []string{
+		"incident eBPF flow list truncated: showing 0 of 12 observed flow entries",
+		"incident eBPF flow details omitted: recording eBPF flow sample budget exhausted",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+		}
+	}
+}
+
 func TestCompareRetransmitFlowDisplayUnavailableAndNone(t *testing.T) {
 	baseline := comparisonNoEBPFRecording()
 	incident := comparisonFlowRecording(nil, false, 0)

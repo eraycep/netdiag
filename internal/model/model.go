@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-const FormatVersion = 12
+const FormatVersion = 13
 
 const (
 	EBPFFeatureTCPRetransmitEvents    = "tcp_retransmit_events"
@@ -157,11 +157,12 @@ type InterfaceStats struct {
 }
 
 type EBPFStats struct {
-	TCPRetransmitEvents         uint64              `json:"tcp_retransmit_events"`
-	TCPRetransmitFlows          []TCPRetransmitFlow `json:"tcp_retransmit_flows,omitempty"`
-	TCPRetransmitFlowsTruncated bool                `json:"tcp_retransmit_flows_truncated,omitempty"`
-	TCPRetransmitFlowCount      int                 `json:"tcp_retransmit_flow_count,omitempty"`
-	FeatureErrors               []EBPFFeatureError  `json:"feature_errors,omitempty"`
+	TCPRetransmitEvents             uint64              `json:"tcp_retransmit_events"`
+	TCPRetransmitFlows              []TCPRetransmitFlow `json:"tcp_retransmit_flows,omitempty"`
+	TCPRetransmitFlowsTruncated     bool                `json:"tcp_retransmit_flows_truncated,omitempty"`
+	TCPRetransmitFlowCount          int                 `json:"tcp_retransmit_flow_count,omitempty"`
+	TCPRetransmitFlowsOmittedReason string              `json:"tcp_retransmit_flows_omitted_reason,omitempty"`
+	FeatureErrors                   []EBPFFeatureError  `json:"feature_errors,omitempty"`
 }
 
 type EBPFFeatureError struct {
