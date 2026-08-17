@@ -278,6 +278,19 @@ func TestAnalyzeReportsTCPSocketReceiveQueueGrowth(t *testing.T) {
 				RXQueue:          1024 + 70*1024,
 				MaxRXQueue:       48 * 1024,
 				NonZeroRXSockets: 2,
+				TopQueues: []model.TCPSocketQueue{
+					{
+						Protocol:      "tcp4",
+						LocalAddress:  "127.0.0.1",
+						LocalPort:     8080,
+						RemoteAddress: "127.0.0.1",
+						RemotePort:    50000,
+						State:         "01",
+						RXQueue:       48 * 1024,
+					},
+				},
+				TopQueuesTruncated: true,
+				SocketQueueCount:   4,
 			},
 		},
 	}}
@@ -298,6 +311,8 @@ func TestAnalyzeReportsTCPSocketReceiveQueueGrowth(t *testing.T) {
 		"TCP receive queues increased by 71680 bytes",
 		"2 sockets ended with non-zero receive queues",
 		"largest observed receive queue was 49152 bytes",
+		"Top TCP socket receive queue: tcp4 127.0.0.1:8080 -> 127.0.0.1:50000 state 01 had 49152 bytes queued",
+		"TCP socket queue list truncated: showing 1 of 4 sockets with queued bytes",
 	} {
 		if !strings.Contains(evidence, want) {
 			t.Fatalf("missing socket queue evidence %q: %s", want, evidence)
@@ -330,6 +345,17 @@ func TestAnalyzeReportsTCPSocketTransmitQueueGrowth(t *testing.T) {
 				TXQueue:          2048 + 80*1024,
 				MaxTXQueue:       64 * 1024,
 				NonZeroTXSockets: 1,
+				TopQueues: []model.TCPSocketQueue{
+					{
+						Protocol:      "tcp4",
+						LocalAddress:  "127.0.0.1",
+						LocalPort:     8080,
+						RemoteAddress: "127.0.0.1",
+						RemotePort:    50000,
+						State:         "01",
+						TXQueue:       64 * 1024,
+					},
+				},
 			},
 		},
 	}}
@@ -350,6 +376,7 @@ func TestAnalyzeReportsTCPSocketTransmitQueueGrowth(t *testing.T) {
 		"TCP transmit queues increased by 81920 bytes",
 		"1 sockets ended with non-zero transmit queues",
 		"largest observed transmit queue was 65536 bytes",
+		"Top TCP socket transmit queue: tcp4 127.0.0.1:8080 -> 127.0.0.1:50000 state 01 had 65536 bytes queued",
 	} {
 		if !strings.Contains(evidence, want) {
 			t.Fatalf("missing socket queue evidence %q: %s", want, evidence)

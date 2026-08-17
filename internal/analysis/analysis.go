@@ -170,6 +170,7 @@ func analyzeTCPSocketQueues(first, last model.Sample) (Finding, bool) {
 	if last.TCPSockets.MaxRXQueue > 0 {
 		evidence = append(evidence, fmt.Sprintf("largest observed receive queue was %d bytes", last.TCPSockets.MaxRXQueue))
 	}
+	evidence = append(evidence, tcpSocketQueueEvidence(last.TCPSockets, "rx")...)
 
 	return Finding{
 		Severity:   "warning",
@@ -196,6 +197,7 @@ func analyzeTCPTransmitSocketQueues(first, last model.Sample) (Finding, bool) {
 	if last.TCPSockets.MaxTXQueue > 0 {
 		evidence = append(evidence, fmt.Sprintf("largest observed transmit queue was %d bytes", last.TCPSockets.MaxTXQueue))
 	}
+	evidence = append(evidence, tcpSocketQueueEvidence(last.TCPSockets, "tx")...)
 
 	return Finding{
 		Severity:   "warning",
@@ -204,6 +206,44 @@ func analyzeTCPTransmitSocketQueues(first, last model.Sample) (Finding, bool) {
 		Evidence:   evidence,
 		NextStep:   "Check whether the peer, network path, or send buffer backpressure prevented data from draining.",
 	}, true
+}
+
+func tcpSocketQueueEvidence(stats model.TCPSocketStats, queue string) []string {
+	if len(stats.TopQueues) == 0 {
+		return nil
+	}
+
+	limit := len(stats.TopQueues)
+	if limit > 3 {
+		limit = 3
+	}
+	evidence := make([]string, 0, limit+1)
+	for _, socket := range stats.TopQueues[:limit] {
+		queueValue := socket.RXQueue
+		queueName := "receive"
+		if queue == "tx" {
+			queueValue = socket.TXQueue
+			queueName = "transmit"
+		}
+		if queueValue == 0 {
+			continue
+		}
+		evidence = append(evidence, fmt.Sprintf(
+			"Top TCP socket %s queue: %s %s:%d -> %s:%d state %s had %d bytes queued",
+			queueName,
+			socket.Protocol,
+			socket.LocalAddress,
+			socket.LocalPort,
+			socket.RemoteAddress,
+			socket.RemotePort,
+			socket.State,
+			queueValue,
+		))
+	}
+	if stats.TopQueuesTruncated {
+		evidence = append(evidence, fmt.Sprintf("TCP socket queue list truncated: showing %d of %d sockets with queued bytes", len(stats.TopQueues), stats.SocketQueueCount))
+	}
+	return evidence
 }
 
 func analyzeProcessSchedstat(first, last model.Sample) (Finding, bool) {

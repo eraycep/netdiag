@@ -172,6 +172,8 @@ Implemented:
 - [x] Baseline-versus-incident TCP receive queue key delta.
 - [x] Conservative aggregate TCP transmit-queue growth finding.
 - [x] Baseline-versus-incident TCP transmit queue key delta.
+- [x] Bounded per-socket TCP queue snapshots from `/proc/net/tcp` and
+  `/proc/net/tcp6`.
 - [x] Reproducible loopback TCP receive-queue experiment.
 - [x] Optional selected-process scheduler counter collection from
   `/proc/<pid>/schedstat`.

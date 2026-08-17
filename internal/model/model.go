@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-const FormatVersion = 13
+const FormatVersion = 14
 
 const (
 	EBPFFeatureTCPRetransmitEvents    = "tcp_retransmit_events"
@@ -56,14 +56,28 @@ type TCPStats struct {
 }
 
 type TCPSocketStats struct {
-	Sockets          uint64 `json:"sockets"`
-	Established      uint64 `json:"established"`
-	TXQueue          uint64 `json:"tx_queue"`
-	RXQueue          uint64 `json:"rx_queue"`
-	MaxTXQueue       uint64 `json:"max_tx_queue"`
-	MaxRXQueue       uint64 `json:"max_rx_queue"`
-	NonZeroTXSockets uint64 `json:"nonzero_tx_sockets"`
-	NonZeroRXSockets uint64 `json:"nonzero_rx_sockets"`
+	Sockets            uint64           `json:"sockets"`
+	Established        uint64           `json:"established"`
+	TXQueue            uint64           `json:"tx_queue"`
+	RXQueue            uint64           `json:"rx_queue"`
+	MaxTXQueue         uint64           `json:"max_tx_queue"`
+	MaxRXQueue         uint64           `json:"max_rx_queue"`
+	NonZeroTXSockets   uint64           `json:"nonzero_tx_sockets"`
+	NonZeroRXSockets   uint64           `json:"nonzero_rx_sockets"`
+	TopQueues          []TCPSocketQueue `json:"top_queues,omitempty"`
+	TopQueuesTruncated bool             `json:"top_queues_truncated,omitempty"`
+	SocketQueueCount   int              `json:"socket_queue_count,omitempty"`
+}
+
+type TCPSocketQueue struct {
+	Protocol      string `json:"protocol"` // tcp4 or tcp6
+	LocalAddress  string `json:"local_address"`
+	LocalPort     uint16 `json:"local_port"`
+	RemoteAddress string `json:"remote_address"`
+	RemotePort    uint16 `json:"remote_port"`
+	State         string `json:"state"`
+	TXQueue       uint64 `json:"tx_queue"`
+	RXQueue       uint64 `json:"rx_queue"`
 }
 
 type IRQStats struct {

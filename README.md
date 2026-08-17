@@ -82,6 +82,15 @@ Record selected-process scheduler counters:
 ./bin/netdiag record --pid 1234 --duration 30s --output capture.json
 ```
 
+Limit serialized TCP socket queue snapshots:
+
+```sh
+./bin/netdiag record --max-tcp-socket-queues=16 --duration 30s --output capture.json
+```
+
+Use `--max-tcp-socket-queues=0` to keep aggregate socket queue counters while
+omitting per-socket queue tuples from each sample.
+
 Limit serialized eBPF per-flow retransmit entries:
 
 ```sh
@@ -117,6 +126,11 @@ The recording format is versioned JSON. Each sample includes:
 
 Version 3 and later recordings use monotonic elapsed time during analysis, so
 wall-clock corrections cannot create invalid capture durations.
+
+TCP socket queue tuples are bounded by `--max-tcp-socket-queues`. Aggregate TCP
+socket queue counters are still collected when the tuple limit is zero. Samples
+include `socket_queue_count` and `top_queues_truncated` when more non-empty
+socket queues were observed than serialized.
 
 eBPF per-flow retransmission entries are bounded twice: the kernel map uses an
 LRU cap, and the recorder serializes at most `--max-ebpf-flows` entries per

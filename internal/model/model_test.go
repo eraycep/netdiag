@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -165,14 +166,28 @@ func TestEBPFStatsJSONIncludesRetransmitFlowsOmittedReason(t *testing.T) {
 func TestSampleJSONIncludesTCPSocketStats(t *testing.T) {
 	want := Sample{
 		TCPSockets: TCPSocketStats{
-			Sockets:          3,
-			Established:      2,
-			TXQueue:          17,
-			RXQueue:          32,
-			MaxTXQueue:       16,
-			MaxRXQueue:       32,
-			NonZeroTXSockets: 2,
-			NonZeroRXSockets: 1,
+			Sockets:            3,
+			Established:        2,
+			TXQueue:            17,
+			RXQueue:            32,
+			MaxTXQueue:         16,
+			MaxRXQueue:         32,
+			NonZeroTXSockets:   2,
+			NonZeroRXSockets:   1,
+			TopQueuesTruncated: true,
+			SocketQueueCount:   2,
+			TopQueues: []TCPSocketQueue{
+				{
+					Protocol:      "tcp4",
+					LocalAddress:  "127.0.0.1",
+					LocalPort:     8080,
+					RemoteAddress: "127.0.0.2",
+					RemotePort:    50000,
+					State:         "01",
+					TXQueue:       17,
+					RXQueue:       32,
+				},
+			},
 		},
 	}
 
@@ -190,6 +205,13 @@ func TestSampleJSONIncludesTCPSocketStats(t *testing.T) {
 		"max_rx_queue",
 		"nonzero_tx_sockets",
 		"nonzero_rx_sockets",
+		"top_queues",
+		"top_queues_truncated",
+		"socket_queue_count",
+		"local_address",
+		"remote_address",
+		"local_port",
+		"remote_port",
 	} {
 		if !strings.Contains(string(data), field) {
 			t.Fatalf("serialized sample missing %q: %s", field, data)
@@ -200,7 +222,7 @@ func TestSampleJSONIncludesTCPSocketStats(t *testing.T) {
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.TCPSockets != want.TCPSockets {
+	if !reflect.DeepEqual(got.TCPSockets, want.TCPSockets) {
 		t.Fatalf("round trip mismatch: got %+v, want %+v", got.TCPSockets, want.TCPSockets)
 	}
 }

@@ -63,6 +63,7 @@ func record(args []string) error {
 	maxSamples := fs.Int("max-samples", 3600, "maximum samples")
 	maxEBPFFlows := fs.Int("max-ebpf-flows", 128, "maximum eBPF per-flow entries to store per sample")
 	maxEBPFFlowSamples := fs.Int("max-ebpf-flow-samples", -1, "maximum samples that serialize eBPF per-flow entries; -1 means unlimited")
+	maxTCPSocketQueues := fs.Int("max-tcp-socket-queues", 16, "maximum TCP socket queue entries to store per sample")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -105,6 +106,10 @@ func record(args []string) error {
 		return errors.New("max ebpf flow samples must be -1 or greater")
 	}
 
+	if *maxTCPSocketQueues < 0 {
+		return errors.New("max tcp socket queues must be 0 or greater")
+	}
+
 	var bpfCollector *ebpfcollector.Collector
 	if *useEBPF {
 		var err error
@@ -134,7 +139,7 @@ func record(args []string) error {
 	ebpfFlowBudget := newEBPFFlowSampleBudget(*maxEBPFFlowSamples)
 
 	for {
-		sample, err := c.Sample(*iface)
+		sample, err := c.Sample(*iface, *maxTCPSocketQueues)
 		if err != nil {
 			return err
 		}

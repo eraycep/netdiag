@@ -19,12 +19,12 @@ type Collector struct {
 
 func New() Collector { return Collector{ProcRoot: "/proc", SysRoot: "/sys"} }
 
-func (c Collector) Sample(iface string) (model.Sample, error) {
+func (c Collector) Sample(iface string, maxTCPSocketQueues int) (model.Sample, error) {
 	tcp, err := c.readTCP()
 	if err != nil {
 		return model.Sample{}, err
 	}
-	tcpSockets, err := c.readTCPSockets()
+	tcpSockets, err := c.readTCPSockets(maxTCPSocketQueues)
 	if err != nil {
 		return model.Sample{}, err
 	}

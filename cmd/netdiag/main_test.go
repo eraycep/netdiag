@@ -271,6 +271,17 @@ func TestRecordRejectsInvalidMaximumEBPFFlowSampleCount(t *testing.T) {
 	}
 }
 
+func TestRecordRejectsInvalidMaximumTCPSocketQueueCount(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "capture.json")
+	err := record([]string{"--max-tcp-socket-queues=-1", "--ebpf=false", "--output=" + path})
+	if err == nil || !strings.Contains(err.Error(), "max tcp socket queues must be 0 or greater") {
+		t.Fatalf("error = %v, want maximum TCP socket queue validation error", err)
+	}
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("output was created for invalid configuration: %v", statErr)
+	}
+}
+
 func TestEBPFFlowSampleBudget(t *testing.T) {
 	budget := newEBPFFlowSampleBudget(1)
 
