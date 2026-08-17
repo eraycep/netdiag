@@ -77,10 +77,10 @@ func Analyze(r model.Recording) ([]Finding, error) {
 			})
 		}
 	}
-	if finding, ok := analyzeTCPSocketQueues(first, last); ok {
+	if finding, ok := analyzeTCPSocketQueues(r.Samples); ok {
 		findings = append(findings, finding)
 	}
-	if finding, ok := analyzeTCPTransmitSocketQueues(first, last); ok {
+	if finding, ok := analyzeTCPTransmitSocketQueues(r.Samples); ok {
 		findings = append(findings, finding)
 	}
 	if finding, ok := analyzeProcessSchedstat(first, last); ok {
@@ -154,23 +154,24 @@ func ebpfFeatureErrorEvidence(stats *model.EBPFStats) []string {
 	return evidence
 }
 
-func analyzeTCPSocketQueues(first, last model.Sample) (Finding, bool) {
-	if last.TCPSockets.RXQueue <= first.TCPSockets.RXQueue {
+func analyzeTCPSocketQueues(samples []model.Sample) (Finding, bool) {
+	first, peak, ok := peakTCPSocketQueueSample(samples, "rx")
+	if !ok || peak.TCPSockets.RXQueue <= first.TCPSockets.RXQueue {
 		return Finding{}, false
 	}
-	rxGrowth := last.TCPSockets.RXQueue - first.TCPSockets.RXQueue
-	if rxGrowth < minTCPSocketQueueGrowth || last.TCPSockets.NonZeroRXSockets == 0 {
+	rxGrowth := peak.TCPSockets.RXQueue - first.TCPSockets.RXQueue
+	if rxGrowth < minTCPSocketQueueGrowth || peak.TCPSockets.NonZeroRXSockets == 0 {
 		return Finding{}, false
 	}
 
 	evidence := []string{
 		fmt.Sprintf("TCP receive queues increased by %d bytes", rxGrowth),
-		fmt.Sprintf("%d sockets ended with non-zero receive queues", last.TCPSockets.NonZeroRXSockets),
+		fmt.Sprintf("%d sockets had non-zero receive queues at peak", peak.TCPSockets.NonZeroRXSockets),
 	}
-	if last.TCPSockets.MaxRXQueue > 0 {
-		evidence = append(evidence, fmt.Sprintf("largest observed receive queue was %d bytes", last.TCPSockets.MaxRXQueue))
+	if peak.TCPSockets.MaxRXQueue > 0 {
+		evidence = append(evidence, fmt.Sprintf("largest observed receive queue was %d bytes", peak.TCPSockets.MaxRXQueue))
 	}
-	evidence = append(evidence, tcpSocketQueueEvidence(last.TCPSockets, "rx")...)
+	evidence = append(evidence, tcpSocketQueueEvidence(peak.TCPSockets, "rx")...)
 
 	return Finding{
 		Severity:   "warning",
@@ -181,23 +182,24 @@ func analyzeTCPSocketQueues(first, last model.Sample) (Finding, bool) {
 	}, true
 }
 
-func analyzeTCPTransmitSocketQueues(first, last model.Sample) (Finding, bool) {
-	if last.TCPSockets.TXQueue <= first.TCPSockets.TXQueue {
+func analyzeTCPTransmitSocketQueues(samples []model.Sample) (Finding, bool) {
+	first, peak, ok := peakTCPSocketQueueSample(samples, "tx")
+	if !ok || peak.TCPSockets.TXQueue <= first.TCPSockets.TXQueue {
 		return Finding{}, false
 	}
-	txGrowth := last.TCPSockets.TXQueue - first.TCPSockets.TXQueue
-	if txGrowth < minTCPSocketQueueGrowth || last.TCPSockets.NonZeroTXSockets == 0 {
+	txGrowth := peak.TCPSockets.TXQueue - first.TCPSockets.TXQueue
+	if txGrowth < minTCPSocketQueueGrowth || peak.TCPSockets.NonZeroTXSockets == 0 {
 		return Finding{}, false
 	}
 
 	evidence := []string{
 		fmt.Sprintf("TCP transmit queues increased by %d bytes", txGrowth),
-		fmt.Sprintf("%d sockets ended with non-zero transmit queues", last.TCPSockets.NonZeroTXSockets),
+		fmt.Sprintf("%d sockets had non-zero transmit queues at peak", peak.TCPSockets.NonZeroTXSockets),
 	}
-	if last.TCPSockets.MaxTXQueue > 0 {
-		evidence = append(evidence, fmt.Sprintf("largest observed transmit queue was %d bytes", last.TCPSockets.MaxTXQueue))
+	if peak.TCPSockets.MaxTXQueue > 0 {
+		evidence = append(evidence, fmt.Sprintf("largest observed transmit queue was %d bytes", peak.TCPSockets.MaxTXQueue))
 	}
-	evidence = append(evidence, tcpSocketQueueEvidence(last.TCPSockets, "tx")...)
+	evidence = append(evidence, tcpSocketQueueEvidence(peak.TCPSockets, "tx")...)
 
 	return Finding{
 		Severity:   "warning",
@@ -206,6 +208,29 @@ func analyzeTCPTransmitSocketQueues(first, last model.Sample) (Finding, bool) {
 		Evidence:   evidence,
 		NextStep:   "Check whether the peer, network path, or send buffer backpressure prevented data from draining.",
 	}, true
+}
+
+func peakTCPSocketQueueSample(samples []model.Sample, queue string) (model.Sample, model.Sample, bool) {
+	if len(samples) == 0 {
+		return model.Sample{}, model.Sample{}, false
+	}
+	first := samples[0]
+	peak := samples[0]
+	for _, sample := range samples[1:] {
+		switch queue {
+		case "rx":
+			if sample.TCPSockets.RXQueue > peak.TCPSockets.RXQueue {
+				peak = sample
+			}
+		case "tx":
+			if sample.TCPSockets.TXQueue > peak.TCPSockets.TXQueue {
+				peak = sample
+			}
+		default:
+			return model.Sample{}, model.Sample{}, false
+		}
+	}
+	return first, peak, true
 }
 
 func tcpSocketQueueEvidence(stats model.TCPSocketStats, queue string) []string {

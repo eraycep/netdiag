@@ -54,12 +54,14 @@ Expected evidence includes:
 
 ```text
 Evidence: TCP receive queues increased by ... bytes
-Evidence: ... sockets ended with non-zero receive queues
+Evidence: ... sockets had non-zero receive queues at peak
+Evidence: Top TCP socket receive queue: tcp4 127.0.0.1:<port> -> 127.0.0.1:<port> state 01 had ... bytes queued
 ```
 
 This finding is intentionally conservative. It shows aggregate receive queue
-growth, but it does not identify the process or socket responsible and does not
-prove application causality.
+growth and, when `--max-tcp-socket-queues` is greater than zero, the bounded top
+socket queue tuples observed at the queue peak. It does not identify the
+owning process and does not prove application causality.
 
 If the finding is not reported, increase `PAYLOAD_BYTES` or `SERVER_SLEEP`.
 
@@ -69,6 +71,7 @@ when comparing a baseline capture with an incident capture:
 ```text
 - TCP receive queue: 0 B, 0 sockets non-zero -> 127168 B, 1 sockets non-zero
 - TCP transmit queue: 0 B, 0 sockets non-zero -> 0 B, 0 sockets non-zero
+- top TCP socket queues: none -> tcp4 127.0.0.1:<port> -> 127.0.0.1:<port> state 01 rx=127168B tx=0B
 ```
 
 ## Validated run
@@ -96,8 +99,9 @@ Finding 2: TCP socket receive queues grew during the capture
 Confidence: possible
 Severity: warning
 Evidence: TCP receive queues increased by 127168 bytes
-Evidence: 1 sockets ended with non-zero receive queues
+Evidence: 1 sockets had non-zero receive queues at peak
 Evidence: largest observed receive queue was 127168 bytes
+Evidence: Top TCP socket receive queue: tcp4 127.0.0.1:<port> -> 127.0.0.1:<port> state 01 had 127168 bytes queued
 Next step: Check whether the application or peer was slow to read from established sockets.
 ```
 

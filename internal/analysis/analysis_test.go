@@ -309,13 +309,52 @@ func TestAnalyzeReportsTCPSocketReceiveQueueGrowth(t *testing.T) {
 	evidence := strings.Join(findings[0].Evidence, " ")
 	for _, want := range []string{
 		"TCP receive queues increased by 71680 bytes",
-		"2 sockets ended with non-zero receive queues",
+		"2 sockets had non-zero receive queues at peak",
 		"largest observed receive queue was 49152 bytes",
 		"Top TCP socket receive queue: tcp4 127.0.0.1:8080 -> 127.0.0.1:50000 state 01 had 49152 bytes queued",
 		"TCP socket queue list truncated: showing 1 of 4 sockets with queued bytes",
 	} {
 		if !strings.Contains(evidence, want) {
 			t.Fatalf("missing socket queue evidence %q: %s", want, evidence)
+		}
+	}
+}
+
+func TestAnalyzeReportsTransientTCPSocketReceiveQueueGrowth(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second)},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			TCPSockets: model.TCPSocketStats{
+				RXQueue:          128 * 1024,
+				MaxRXQueue:       128 * 1024,
+				NonZeroRXSockets: 1,
+				TopQueues: []model.TCPSocketQueue{
+					{Protocol: "tcp4", LocalAddress: "127.0.0.1", LocalPort: 8080, RemoteAddress: "127.0.0.1", RemotePort: 50000, State: "01", RXQueue: 128 * 1024},
+				},
+				SocketQueueCount: 1,
+			},
+		},
+		{Timestamp: now.Add(2 * time.Second), ElapsedNanos: int64(3 * time.Second)},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if findings[0].Summary != "TCP socket receive queues grew during the capture" {
+		t.Fatalf("finding summary = %q", findings[0].Summary)
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	for _, want := range []string{
+		"TCP receive queues increased by 131072 bytes",
+		"Top TCP socket receive queue: tcp4 127.0.0.1:8080 -> 127.0.0.1:50000 state 01 had 131072 bytes queued",
+	} {
+		if !strings.Contains(evidence, want) {
+			t.Fatalf("missing transient socket queue evidence %q: %s", want, evidence)
 		}
 	}
 }
@@ -374,7 +413,7 @@ func TestAnalyzeReportsTCPSocketTransmitQueueGrowth(t *testing.T) {
 	evidence := strings.Join(findings[0].Evidence, " ")
 	for _, want := range []string{
 		"TCP transmit queues increased by 81920 bytes",
-		"1 sockets ended with non-zero transmit queues",
+		"1 sockets had non-zero transmit queues at peak",
 		"largest observed transmit queue was 65536 bytes",
 		"Top TCP socket transmit queue: tcp4 127.0.0.1:8080 -> 127.0.0.1:50000 state 01 had 65536 bytes queued",
 	} {

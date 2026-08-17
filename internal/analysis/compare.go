@@ -217,7 +217,24 @@ func lastTCPSocketStats(r model.Recording) model.TCPSocketStats {
 	if len(r.Samples) == 0 {
 		return model.TCPSocketStats{}
 	}
-	return r.Samples[len(r.Samples)-1].TCPSockets
+	peak := r.Samples[0].TCPSockets
+	for _, sample := range r.Samples[1:] {
+		if tcpSocketQueuedBytes(sample.TCPSockets) > tcpSocketQueuedBytes(peak) {
+			peak = sample.TCPSockets
+		}
+	}
+	return peak
+}
+
+func tcpSocketQueuedBytes(stats model.TCPSocketStats) uint64 {
+	total := stats.RXQueue + stats.TXQueue
+	if total > 0 {
+		return total
+	}
+	for _, queue := range stats.TopQueues {
+		total += queue.RXQueue + queue.TXQueue
+	}
+	return total
 }
 
 func tcpSocketQueueSideDisplay(label string, stats model.TCPSocketStats, limit int) string {
@@ -543,16 +560,22 @@ func tcpReceiveQueueDisplay(r model.Recording) string {
 	if len(r.Samples) == 0 {
 		return "unavailable"
 	}
-	last := r.Samples[len(r.Samples)-1].TCPSockets
-	return fmt.Sprintf("%d B, %d sockets non-zero", last.RXQueue, last.NonZeroRXSockets)
+	_, peak, ok := peakTCPSocketQueueSample(r.Samples, "rx")
+	if !ok {
+		return "unavailable"
+	}
+	return fmt.Sprintf("%d B, %d sockets non-zero", peak.TCPSockets.RXQueue, peak.TCPSockets.NonZeroRXSockets)
 }
 
 func tcpTransmitQueueDisplay(r model.Recording) string {
 	if len(r.Samples) == 0 {
 		return "unavailable"
 	}
-	last := r.Samples[len(r.Samples)-1].TCPSockets
-	return fmt.Sprintf("%d B, %d sockets non-zero", last.TXQueue, last.NonZeroTXSockets)
+	_, peak, ok := peakTCPSocketQueueSample(r.Samples, "tx")
+	if !ok {
+		return "unavailable"
+	}
+	return fmt.Sprintf("%d B, %d sockets non-zero", peak.TCPSockets.TXQueue, peak.TCPSockets.NonZeroTXSockets)
 }
 
 func lastProcessStats(r model.Recording) (*model.ProcessStats, bool) {
