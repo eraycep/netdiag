@@ -89,7 +89,8 @@ Limit serialized TCP socket queue snapshots:
 ```
 
 Use `--max-tcp-socket-queues=0` to keep aggregate socket queue counters while
-omitting per-socket queue tuples from each sample.
+omitting per-socket queue tuples from each sample. Socket queue tuples include
+local and remote IP addresses and ports.
 
 Limit serialized eBPF per-flow retransmit entries:
 
@@ -130,7 +131,9 @@ wall-clock corrections cannot create invalid capture durations.
 TCP socket queue tuples are bounded by `--max-tcp-socket-queues`. Aggregate TCP
 socket queue counters are still collected when the tuple limit is zero. Samples
 include `socket_queue_count` and `top_queues_truncated` when more non-empty
-socket queues were observed than serialized.
+socket queues were observed than serialized. Socket queue tuples include local
+and remote IP addresses and ports; set `--max-tcp-socket-queues=0` to omit them
+while keeping aggregate socket queue counters.
 
 eBPF per-flow retransmission entries are bounded twice: the kernel map uses an
 LRU cap, and the recorder serializes at most `--max-ebpf-flows` entries per
