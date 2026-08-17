@@ -9,6 +9,7 @@ INTERVAL=${INTERVAL:-500ms}
 PAYLOAD_BYTES=${PAYLOAD_BYTES:-16777216}
 SERVER_SLEEP=${SERVER_SLEEP:-8}
 CLIENT_TIMEOUT=${CLIENT_TIMEOUT:-0.2}
+MAX_TCP_SOCKET_QUEUES=${MAX_TCP_SOCKET_QUEUES:-16}
 
 if ! command -v python3 >/dev/null 2>&1; then
   echo "required command not found: python3" >&2
@@ -38,6 +39,7 @@ echo "recording ${DURATION} while a local TCP server accepts but does not read"
   --duration "${DURATION}" \
   --interval "${INTERVAL}" \
   --max-samples 3600 \
+  --max-tcp-socket-queues "${MAX_TCP_SOCKET_QUEUES}" \
   --ebpf=false \
   --output "${capture}" &
 recorder_pid=$!
@@ -95,6 +97,9 @@ recorder_pid=""
 
 if ! grep -q "TCP socket receive queues grew during the capture" "${analysis}"; then
   echo "warning: socket receive queue finding was not reported; try increasing PAYLOAD_BYTES or SERVER_SLEEP" >&2
+fi
+if ! grep -q "Top TCP socket receive queue" "${analysis}"; then
+  echo "warning: top TCP socket receive queue evidence was not reported; check MAX_TCP_SOCKET_QUEUES or whether queues cleared between samples" >&2
 fi
 
 echo

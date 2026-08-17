@@ -31,6 +31,7 @@ DURATION=10s \
 INTERVAL=500ms \
 PAYLOAD_BYTES=16777216 \
 SERVER_SLEEP=8 \
+MAX_TCP_SOCKET_QUEUES=16 \
 bash experiments/tcp-rx-queue.sh "$PWD"
 ```
 
@@ -41,6 +42,8 @@ Important parameters:
   reading.
 - `DURATION`: recorder duration.
 - `INTERVAL`: recorder sample interval.
+- `MAX_TCP_SOCKET_QUEUES`: maximum queued socket tuples serialized per sample.
+  Set to `0` to keep only aggregate queue counters.
 
 ## Expected evidence
 
@@ -76,20 +79,22 @@ when comparing a baseline capture with an incident capture:
 
 ## Validated run
 
-On August 7, 2026, a short validation run completed on the development host
+On August 17, 2026, a validation run completed on the development host
 with:
 
 ```text
-DURATION=5s
-SERVER_SLEEP=4
-PAYLOAD_BYTES=33554432
+DURATION=10s
+INTERVAL=500ms
+SERVER_SLEEP=8
+PAYLOAD_BYTES=16777216
+MAX_TCP_SOCKET_QUEUES=16
 ```
 
 The client wrote enough data to block behind the server that accepted the
 connection but did not read:
 
 ```text
-client sent 1900544 bytes; send timeouts 16
+client sent 1900544 bytes; send timeouts 31
 ```
 
 The analyzer reported the receive-queue validation target:
@@ -101,17 +106,34 @@ Severity: warning
 Evidence: TCP receive queues increased by 127168 bytes
 Evidence: 1 sockets had non-zero receive queues at peak
 Evidence: largest observed receive queue was 127168 bytes
-Evidence: Top TCP socket receive queue: tcp4 127.0.0.1:<port> -> 127.0.0.1:<port> state 01 had 127168 bytes queued
+Evidence: Top TCP socket receive queue: tcp4 127.0.0.1:35359 -> 127.0.0.1:33036 state 01 had 127168 bytes queued
 Next step: Check whether the application or peer was slow to read from established sockets.
 ```
 
-The same run also reported a small TCP retransmission finding on loopback:
+The same run also reported a small TCP retransmission finding:
 
 ```text
 Finding 1: TCP retransmissions were elevated during the capture
-Evidence: 1 retransmitted of 43 outbound TCP segments (2.33%)
+Evidence: 1 retransmitted of 41 outbound TCP segments (2.44%)
 ```
 
 That retransmission finding is timing-sensitive context, not the validation
 target. The receive-queue finding is the direct signal this experiment is meant
 to exercise.
+
+The run also reported a transmit-queue finding. Its top socket queue evidence
+included the loopback experiment connection and one unrelated established
+external TCP socket:
+
+```text
+Finding 3: TCP socket transmit queues grew during the capture
+Evidence: TCP transmit queues increased by 1773430 bytes
+Evidence: 2 sockets had non-zero transmit queues at peak
+Evidence: largest observed transmit queue was 1773376 bytes
+Evidence: Top TCP socket transmit queue: tcp4 127.0.0.1:33036 -> 127.0.0.1:35359 state 01 had 1773376 bytes queued
+Evidence: Top TCP socket transmit queue: tcp4 10.22.227.227:60712 -> 3.68.61.181:443 state 01 had 54 bytes queued
+```
+
+This is expected with the current collector because `/proc/net/tcp` is scoped
+to the network namespace, not to the experiment process or connection. The
+receive-queue finding remains the validation target.

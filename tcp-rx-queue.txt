@@ -1,7 +1,7 @@
 Finding 1: TCP retransmissions were elevated during the capture
 Confidence: strong correlation
 Severity: warning
-Evidence: 3 retransmitted of 65 outbound TCP segments (4.62%)
+Evidence: 1 retransmitted of 41 outbound TCP segments (2.44%)
 Evidence: eBPF tcp_retransmit_events disabled
 Evidence: eBPF tcp_retransmit_ipv4_flows disabled
 Next step: Check packet loss, ECN/congestion signals, peer health, and interface error counters.
@@ -12,14 +12,15 @@ Severity: warning
 Evidence: TCP receive queues increased by 127168 bytes
 Evidence: 1 sockets had non-zero receive queues at peak
 Evidence: largest observed receive queue was 127168 bytes
-Evidence: Top TCP socket receive queue: tcp4 127.0.0.1:37039 -> 127.0.0.1:34440 state 01 had 127168 bytes queued
+Evidence: Top TCP socket receive queue: tcp4 127.0.0.1:35359 -> 127.0.0.1:33036 state 01 had 127168 bytes queued
 Next step: Check whether the application or peer was slow to read from established sockets.
 
 Finding 3: TCP socket transmit queues grew during the capture
 Confidence: possible
 Severity: warning
-Evidence: TCP transmit queues increased by 1773376 bytes
-Evidence: 1 sockets had non-zero transmit queues at peak
+Evidence: TCP transmit queues increased by 1773430 bytes
+Evidence: 2 sockets had non-zero transmit queues at peak
 Evidence: largest observed transmit queue was 1773376 bytes
-Evidence: Top TCP socket transmit queue: tcp4 127.0.0.1:34440 -> 127.0.0.1:37039 state 01 had 1773376 bytes queued
+Evidence: Top TCP socket transmit queue: tcp4 127.0.0.1:33036 -> 127.0.0.1:35359 state 01 had 1773376 bytes queued
+Evidence: Top TCP socket transmit queue: tcp4 10.22.227.227:60712 -> 3.68.61.181:443 state 01 had 54 bytes queued
 Next step: Check whether the peer, network path, or send buffer backpressure prevented data from draining.
