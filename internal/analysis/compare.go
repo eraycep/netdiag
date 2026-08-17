@@ -164,11 +164,13 @@ func compareKeyDeltas(baseline, incident model.Recording) []KeyDeltaChange {
 	baselineReceiveCPU := receiveCPUDeltaDisplay(baseline)
 	incidentReceiveCPU := receiveCPUDeltaDisplay(incident)
 	retransmitFlows := retransmitFlowDeltaDisplay(baseline, incident)
+	socketQueues := tcpSocketQueueDeltaDisplay(baseline, incident)
 
 	changes := []KeyDeltaChange{
 		{Name: "TCP retransmits", BaselineDisplay: tcpRetransmitDeltaDisplay(baseline), IncidentDisplay: tcpRetransmitDeltaDisplay(incident)},
 		{Name: "TCP receive queue", BaselineDisplay: tcpReceiveQueueDisplay(baseline), IncidentDisplay: tcpReceiveQueueDisplay(incident)},
 		{Name: "TCP transmit queue", BaselineDisplay: tcpTransmitQueueDisplay(baseline), IncidentDisplay: tcpTransmitQueueDisplay(incident)},
+		{Name: "top TCP socket queues", BaselineDisplay: socketQueues.baseline, IncidentDisplay: socketQueues.incident},
 		{Name: "top eBPF retransmit flows", BaselineDisplay: retransmitFlows.baseline, IncidentDisplay: retransmitFlows.incident},
 		{Name: "top NET_RX softirq CPU", BaselineDisplay: baselineReceiveCPU.softirq, IncidentDisplay: incidentReceiveCPU.softirq},
 		{Name: "top NET_RX CPU busy", BaselineDisplay: baselineReceiveCPU.busy, IncidentDisplay: incidentReceiveCPU.busy},
@@ -197,6 +199,59 @@ func compareKeyDeltas(baseline, incident model.Recording) []KeyDeltaChange {
 type retransmitFlowComparisonDisplay struct {
 	baseline string
 	incident string
+}
+
+type tcpSocketQueueComparisonDisplay struct {
+	baseline string
+	incident string
+}
+
+func tcpSocketQueueDeltaDisplay(baseline, incident model.Recording) tcpSocketQueueComparisonDisplay {
+	return tcpSocketQueueComparisonDisplay{
+		baseline: tcpSocketQueueSideDisplay("baseline", lastTCPSocketStats(baseline), 3),
+		incident: tcpSocketQueueSideDisplay("incident", lastTCPSocketStats(incident), 3),
+	}
+}
+
+func lastTCPSocketStats(r model.Recording) model.TCPSocketStats {
+	if len(r.Samples) == 0 {
+		return model.TCPSocketStats{}
+	}
+	return r.Samples[len(r.Samples)-1].TCPSockets
+}
+
+func tcpSocketQueueSideDisplay(label string, stats model.TCPSocketStats, limit int) string {
+	if limit > len(stats.TopQueues) {
+		limit = len(stats.TopQueues)
+	}
+
+	parts := make([]string, 0, limit+1)
+	for _, queue := range stats.TopQueues[:limit] {
+		parts = append(parts, fmt.Sprintf(
+			"%s %s:%d -> %s:%d state %s rx=%dB tx=%dB",
+			queue.Protocol,
+			queue.LocalAddress,
+			queue.LocalPort,
+			queue.RemoteAddress,
+			queue.RemotePort,
+			queue.State,
+			queue.RXQueue,
+			queue.TXQueue,
+		))
+	}
+
+	display := "none"
+	if len(parts) > 0 {
+		display = strings.Join(parts, "; ")
+	}
+	if stats.TopQueuesTruncated {
+		total := stats.SocketQueueCount
+		if total == 0 {
+			total = len(stats.TopQueues)
+		}
+		display += fmt.Sprintf("; %s TCP socket queue list truncated: showing %d of %d sockets with queued bytes", label, len(stats.TopQueues), total)
+	}
+	return display
 }
 
 type retransmitFlowKey struct {

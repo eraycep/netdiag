@@ -128,6 +128,89 @@ func TestCompareReportsTCPTransmitQueueSignalChanges(t *testing.T) {
 	}
 }
 
+func TestCompareReportsIncidentOnlyTopTCPSocketQueue(t *testing.T) {
+	baseline := tcpSocketTopQueueComparisonRecording(nil, false, 0)
+	incident := tcpSocketTopQueueComparisonRecording([]model.TCPSocketQueue{
+		{
+			Protocol:      "tcp4",
+			LocalAddress:  "127.0.0.1",
+			LocalPort:     8080,
+			RemoteAddress: "127.0.0.1",
+			RemotePort:    50000,
+			State:         "01",
+			RXQueue:       49152,
+		},
+	}, false, 1)
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	want := "- top TCP socket queues: none -> tcp4 127.0.0.1:8080 -> 127.0.0.1:50000 state 01 rx=49152B tx=0B"
+	if !strings.Contains(rendered, want) {
+		t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+	}
+}
+
+func TestCompareReportsSharedTopTCPSocketQueueDelta(t *testing.T) {
+	baseline := tcpSocketTopQueueComparisonRecording([]model.TCPSocketQueue{
+		{
+			Protocol:      "tcp4",
+			LocalAddress:  "127.0.0.1",
+			LocalPort:     8080,
+			RemoteAddress: "127.0.0.1",
+			RemotePort:    50000,
+			State:         "01",
+			RXQueue:       1024,
+			TXQueue:       2048,
+		},
+	}, false, 1)
+	incident := tcpSocketTopQueueComparisonRecording([]model.TCPSocketQueue{
+		{
+			Protocol:      "tcp4",
+			LocalAddress:  "127.0.0.1",
+			LocalPort:     8080,
+			RemoteAddress: "127.0.0.1",
+			RemotePort:    50000,
+			State:         "01",
+			RXQueue:       8192,
+			TXQueue:       4096,
+		},
+	}, false, 1)
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	want := "- top TCP socket queues: tcp4 127.0.0.1:8080 -> 127.0.0.1:50000 state 01 rx=1024B tx=2048B -> tcp4 127.0.0.1:8080 -> 127.0.0.1:50000 state 01 rx=8192B tx=4096B"
+	if !strings.Contains(rendered, want) {
+		t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+	}
+}
+
+func TestCompareReportsTopTCPSocketQueueTruncation(t *testing.T) {
+	baseline := tcpSocketTopQueueComparisonRecording(nil, false, 0)
+	incident := tcpSocketTopQueueComparisonRecording([]model.TCPSocketQueue{
+		{Protocol: "tcp4", LocalAddress: "127.0.0.1", LocalPort: 8080, RemoteAddress: "127.0.0.1", RemotePort: 50000, State: "01", RXQueue: 4096},
+		{Protocol: "tcp4", LocalAddress: "127.0.0.1", LocalPort: 8081, RemoteAddress: "127.0.0.1", RemotePort: 50001, State: "01", RXQueue: 2048},
+	}, true, 12)
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	want := "incident TCP socket queue list truncated: showing 2 of 12 sockets with queued bytes"
+	if !strings.Contains(rendered, want) {
+		t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+	}
+}
+
 func TestCompareReportsProcessSchedstatSignalChanges(t *testing.T) {
 	baseline := processComparisonRecording(&model.ProcessStats{
 		RuntimeNanos:      1000000,
@@ -419,6 +502,22 @@ func processComparisonRecording(process *model.ProcessStats) model.Recording {
 			Timestamp:    now.Add(time.Second),
 			ElapsedNanos: int64(2 * time.Second),
 			Process:      process,
+		},
+	}}
+}
+
+func tcpSocketTopQueueComparisonRecording(topQueues []model.TCPSocketQueue, truncated bool, queueCount int) model.Recording {
+	now := time.Now()
+	return model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second)},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			TCPSockets: model.TCPSocketStats{
+				TopQueues:          topQueues,
+				TopQueuesTruncated: truncated,
+				SocketQueueCount:   queueCount,
+			},
 		},
 	}}
 }
