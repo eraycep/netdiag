@@ -21,27 +21,33 @@ not count toward the roadmap requirement for five real incidents.
 
 ## CI-002: proxy CPU contention
 
-- Status: planned
-- Impairment: pin NGINX and a CPU burner to the same CPU
-- Expected symptom: increased tail latency without retransmission evidence
-- Evidence needed: per-CPU softirq, process scheduling delay, workload latency
-- Current blocker: scheduler instrumentation is not implemented
+- Status: partially validated with synthetic local workload
+- Impairment: concentrate receive processing, client work, or selected process
+  execution on a busy CPU
+- Expected symptom: reduced throughput or increased tail latency without
+  requiring retransmission evidence
+- Evidence available: per-CPU softirq, CPU busy time, optional selected-process
+  scheduler delay, workload latency
+- Remaining gap: validation with a real proxy workload and request-level
+  attribution
 
 ## CI-003: backend socket-reader stall
 
-- Status: planned
+- Status: partially validated with loopback socket-reader experiment
 - Impairment: pause backend reads for controlled intervals
 - Expected symptom: growing socket queues and proxy request latency
-- Evidence needed: per-socket queues and wakeup-to-run delay
-- Current blocker: per-flow/socket instrumentation is not implemented
+- Evidence available: aggregate socket queues and bounded top socket queue
+  tuples
+- Remaining gap: process ownership, wakeup-to-run delay, and exact request
+  attribution
 
 ## CI-004: shallow qdisc queue
 
-- Status: planned
+- Status: completed in controlled qdisc-drop experiment
 - Impairment: rate limit traffic with a deliberately shallow egress queue
 - Expected symptom: qdisc backlog/drops, retransmissions, and tail latency
-- Evidence needed: `tc -s qdisc` counters in the recording
-- Current blocker: qdisc collection is not implemented
+- Evidence available: `tc -s qdisc` counters in the recording, retransmission
+  counters, and baseline-versus-incident comparison
 
 ## Narrative template
 

@@ -73,8 +73,9 @@ Current limitations:
 - IRQ-to-interface mapping depends on sysfs metadata and driver naming.
 - CPU concentration and qdisc findings are conservative correlations, not
   causal proof.
-- Per-flow socket attribution is limited to IPv4 retransmit counters; connect
-  latency, RTT, congestion state and socket queues are not implemented.
+- Per-flow attribution now includes bounded IPv4 retransmit counters and
+  bounded TCP socket queue tuples. Connect latency, RTT, congestion state,
+  process ownership, and exact request attribution are not implemented.
 - Queue-level NIC driver counters are explicitly deferred to Phase 4; Phase 1
   uses interface, IRQ, qdisc, softirq and TCP counters only.
 - Baseline-versus-incident comparison currently compares finding sets,

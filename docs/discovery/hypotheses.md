@@ -28,17 +28,19 @@ claiming which layer caused the application latency.
 When network receive processing is delayed by CPU contention, per-interval
 softirq work and CPU scheduling pressure correlate with tail latency.
 
-- Current visibility gap: netdiag aggregates softirq counters across CPUs and
-  does not yet capture scheduling delay.
-- Required future evidence: per-CPU softirq and scheduler timing.
+- Current visibility: netdiag captures per-CPU softirq counters, CPU counters,
+  optional CPU pressure, and optional selected-process scheduler delay.
+- Required future evidence: scheduler timing for more than one selected
+  process and deeper kernel-path timing.
 
 ## H4: socket-reader stall
 
 When the application or backend stops reading, socket receive/send queues grow
 before latency increases, without requiring packet loss.
 
-- Current visibility gap: socket queue and process attribution are deferred to
-  Phase 2.
+- Current visibility: aggregate socket queue counters and bounded top socket
+  queue tuples are implemented. Process ownership and exact request
+  attribution remain gaps.
 - Falsifier: controlled reader stalls produce no queue growth at sufficient
   sampling resolution.
 
@@ -47,7 +49,8 @@ before latency increases, without requiring packet loss.
 When an egress qdisc becomes the bottleneck, qdisc backlog, delay, or drops
 increase while generic interface drop counters may remain unchanged.
 
-- Current visibility gap: qdisc statistics are not collected yet.
+- Current visibility: selected-interface qdisc counters are collected through
+  `tc -s qdisc` when available.
 - Falsifier: a controlled shallow queue drops packets without qdisc evidence.
 
 ## H6: queue or IRQ imbalance
@@ -56,7 +59,9 @@ When flows concentrate on an overloaded receive queue or CPU, queue-level
 drops and interrupt/softirq work become imbalanced even if host totals appear
 healthy.
 
-- Current visibility gap: queue counters and IRQ affinity are not collected.
+- Current visibility gap: queue-level NIC counters are not collected. Selected
+  interface IRQ counts and affinity are collected when kernel metadata permits
+  association.
 - Required environment: a multi-queue physical NIC.
 
 ## H7: negative findings require visibility
