@@ -202,7 +202,7 @@ Optional collectors:
 
 ## Current findings
 
-The analyzer currently reports conservative counter-level findings:
+The analyzer currently reports conservative evidence-backed findings:
 
 - elevated TCP retransmissions;
 - TCP socket queue growth;
@@ -389,6 +389,17 @@ make experiment-rx-queue
 It records a loopback TCP connection where the server accepts but does not read.
 See [docs/experiments/tcp-rx-queue.md](docs/experiments/tcp-rx-queue.md) for
 expected socket queue evidence and tuning guidance.
+
+Run the TCP RTT delay experiment with:
+
+```sh
+make experiment-rtt-delay
+```
+
+It records baseline and delayed veth captures with `--tcp-info` enabled and
+validates the elevated TCP RTT finding. See
+[docs/experiments/tcp-rtt-delay.md](docs/experiments/tcp-rtt-delay.md) for
+expected RTT evidence and visibility limits.
 
 ## Capture overhead benchmark
 

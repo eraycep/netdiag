@@ -31,7 +31,8 @@ evidence and reports visibility gaps instead of claiming exact root cause.
   socket queue tuples, highest TCP RTT, eBPF retransmit flows, eBPF feature
   errors and selected process scheduler counters.
 - Controlled experiments for packet loss, receive CPU concentration, qdisc
-  drops, TCP receive queues and selected-process scheduler delay.
+  drops, TCP receive queues, TCP RTT delay and selected-process scheduler
+  delay.
 
 ## Remaining gaps
 
@@ -69,7 +70,7 @@ evidence and reports visibility gaps instead of claiming exact root cause.
 
 ## Suggested next engineering direction
 
-The next deeper TCP step should be a controlled RTT/congestion experiment for
-the current TCP info rule, or connect-latency collection if connection
-establishment is the next target. Do not start both at once. Each needs its own
-analysis rules, experiments and privacy review.
+The next deeper TCP step should be connect-latency collection if connection
+establishment is the next target, or deeper congestion attribution if RTT
+classification needs more precision. Do not start both at once. Each needs its
+own analysis rules, experiments and privacy review.

@@ -192,6 +192,7 @@ Implemented:
   `--max-tcp-info-sockets`.
 - [x] Conservative elevated TCP RTT finding when `--tcp-info` is enabled.
 - [x] Baseline-versus-incident highest TCP RTT key delta.
+- [x] Reproducible TCP RTT delay experiment validating `--tcp-info` analysis.
 
 Remaining:
 

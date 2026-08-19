@@ -127,11 +127,11 @@ Baseline traffic completed without triggering the receive-path CPU finding:
 
 ```text
 HTTP requests: 12012 succeeded, 0 failed
-Finding 1: No counter-level network anomaly was detected
+Finding 1: No network anomaly was detected with the enabled collectors
 Confidence: unknown
 Severity: info
 Evidence: analyzed 20 samples across 19.0 seconds
-Next step: Use per-flow and scheduler instrumentation before excluding kernel or application latency.
+Next step: Enable additional collectors or use workload-specific instrumentation before excluding kernel or application latency.
 ```
 
 The impaired run pinned both the HTTP client and CPU burner to CPU1. The

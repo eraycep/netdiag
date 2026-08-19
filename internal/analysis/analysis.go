@@ -102,9 +102,9 @@ func Analyze(r model.Recording) ([]Finding, error) {
 	if len(findings) == 0 {
 		findings = append(findings, Finding{
 			Severity: "info", Confidence: "unknown",
-			Summary:  "No counter-level network anomaly was detected",
+			Summary:  "No network anomaly was detected with the enabled collectors",
 			Evidence: []string{fmt.Sprintf("analyzed %d samples across %.1f seconds", len(r.Samples), seconds)},
-			NextStep: "Use per-flow and scheduler instrumentation before excluding kernel or application latency.",
+			NextStep: "Enable additional collectors or use workload-specific instrumentation before excluding kernel or application latency.",
 		})
 	}
 	return findings, nil

@@ -123,11 +123,11 @@ The baseline capture stayed quiet at the qdisc layer:
 
 ```text
 HTTP requests: 5227 succeeded, 0 failed
-Finding 1: No counter-level network anomaly was detected
+Finding 1: No network anomaly was detected with the enabled collectors
 Confidence: unknown
 Severity: info
 Evidence: analyzed 20 samples across 19.0 seconds
-Next step: Use per-flow and scheduler instrumentation before excluding kernel or application latency.
+Next step: Enable additional collectors or use workload-specific instrumentation before excluding kernel or application latency.
 baseline qdisc totals: drops=0, overlimits=0, backlog_packets=0
 ```
 

@@ -1,0 +1,30 @@
+Comparison: /home/eray/netdiag/tcp-rtt-delay-baseline.json -> /home/eray/netdiag/tcp-rtt-delay-impaired.json
+
+Visibility differences:
+- none
+
+Incident-only findings:
+- TCP RTT was elevated during the capture
+
+Shared findings:
+- none
+
+Baseline-only findings:
+- none
+
+Key delta changes:
+- TCP retransmits: 0/183375 outbound segments (0.00%) -> 0/67 outbound segments (0.00%)
+- TCP receive queue: 0 B, 0 sockets non-zero -> 0 B, 0 sockets non-zero
+- TCP transmit queue: 1024 B, 1 sockets non-zero -> 1024 B, 1 sockets non-zero
+- top TCP socket queues: tcp4 198.23.95.2:18080 -> 198.23.95.1:51052 state 01 rx=0B tx=1024B -> tcp4 198.23.95.2:18080 -> 198.23.95.1:36930 state 01 rx=0B tx=1024B
+- top eBPF retransmit flows: unavailable -> unavailable
+- top NET_RX softirq CPU: CPU3 15.0% of 399690 -> CPU0 99.3% of 29486
+- top NET_RX CPU busy: CPU3 17.7% -> CPU0 15.2%
+- process runtime: unavailable -> unavailable
+- process runqueue wait: unavailable -> unavailable
+- process timeslices: unavailable -> unavailable
+- qdisc drops: 0 -> 0
+- qdisc overlimits: 0 -> 0
+- interface drops: 0 -> 0
+- interface errors: 0 -> 0
+- highest TCP RTT: 0.1 ms -> 150.3 ms
