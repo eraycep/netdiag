@@ -1,3 +1,8 @@
 /bin/
 *.json
 /benchmarks/results/
+/cpu-contention-*.txt
+/process-sched-delay-*.txt
+/qdisc-drop-*.txt
+/tcp-rtt-delay-*.txt
+/tcp-rx-queue.txt

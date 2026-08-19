@@ -1,7 +1,0 @@
-Finding 1: TCP RTT was elevated during the capture
-Confidence: possible
-Severity: warning
-Evidence: highest observed TCP RTT was 150.3 ms
-Evidence: Top TCP RTT socket: tcp4 198.23.95.2:18080 -> 198.23.95.1:36930 state ESTAB had 150.3 ms RTT
-Evidence: congestion window was 10 segments
-Next step: Check packet loss, congestion window, retransmissions, peer health, and whether the path is congested.

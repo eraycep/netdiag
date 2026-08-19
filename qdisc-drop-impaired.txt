@@ -1,6 +1,0 @@
-Finding 1: TCP retransmissions were elevated during the capture
-Confidence: strong correlation
-Severity: warning
-Evidence: 694 retransmitted of 1829 outbound TCP segments (37.94%)
-Evidence: eBPF observed 971 tcp_retransmit_skb tracepoint events
-Next step: Check packet loss, ECN/congestion signals, peer health, and interface error counters.
