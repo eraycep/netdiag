@@ -93,7 +93,7 @@ func ipv4String(addr uint32) string {
 	).String()
 }
 
-func retransmitFlowFromBPF(key tcpRetransmitFlow4Key, value tcpRetransmitNetdiagFlowStats) model.TCPRetransmitFlow {
+func retransmitFlowFromBPF(key tcpRetransmitFlowKeyIpv4, value tcpRetransmitNetdiagFlowStats) model.TCPRetransmitFlow {
 	return model.TCPRetransmitFlow{
 		SourceAddress:      ipv4String(key.Saddr),
 		DestinationAddress: ipv4String(key.Daddr),
@@ -104,9 +104,9 @@ func retransmitFlowFromBPF(key tcpRetransmitFlow4Key, value tcpRetransmitNetdiag
 }
 
 func (c *Collector) TCPRetransmitFlows() ([]model.TCPRetransmitFlow, error) {
-	iter := c.objects.TcpRetransmitFlows.Iterate()
+	iter := c.objects.TcpRetransmitFlowsIpv4.Iterate()
 
-	var key tcpRetransmitFlow4Key
+	var key tcpRetransmitFlowKeyIpv4
 	var value tcpRetransmitNetdiagFlowStats
 	var flows []model.TCPRetransmitFlow
 

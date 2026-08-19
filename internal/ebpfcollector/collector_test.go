@@ -9,7 +9,7 @@ import (
 
 func TestRetransmitFlowFromBPFConvertsAddressesAndPorts(t *testing.T) {
 	got := retransmitFlowFromBPF(
-		tcpRetransmitFlow4Key{
+		tcpRetransmitFlowKeyIpv4{
 			Saddr: 0x0100007f,
 			Daddr: 0x0200007f,
 			Sport: 43210,
