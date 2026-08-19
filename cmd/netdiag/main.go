@@ -64,6 +64,8 @@ func record(args []string) error {
 	maxEBPFFlows := fs.Int("max-ebpf-flows", 128, "maximum eBPF per-flow entries to store per sample")
 	maxEBPFFlowSamples := fs.Int("max-ebpf-flow-samples", -1, "maximum samples that serialize eBPF per-flow entries; -1 means unlimited")
 	maxTCPSocketQueues := fs.Int("max-tcp-socket-queues", 16, "maximum TCP socket queue entries to store per sample")
+	useTCPInfo := fs.Bool("tcp-info", false, "collect TCP RTT and congestion details from ss -tin")
+	maxTCPInfoSockets := fs.Int("max-tcp-info-sockets", 32, "maximum ss TCP info socket entries to store per sample")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -86,7 +88,7 @@ func record(args []string) error {
 
 	r := model.Recording{Version: model.FormatVersion, StartedAt: captureStart.UTC(),
 		Interface: *iface, PID: *pid, Host: model.Host{Hostname: hostname, Kernel: kernel},
-		Collectors: buildCollectorManifest(*iface, *pid, *useEBPF)}
+		Collectors: buildCollectorManifest(*iface, *pid, *useEBPF, *useTCPInfo)}
 	if *useEBPF {
 		r.EBPFFeatures = ebpfcollector.UnavailableFeatures("collector was not initialized")
 	} else {
@@ -108,6 +110,9 @@ func record(args []string) error {
 
 	if *maxTCPSocketQueues < 0 {
 		return errors.New("max tcp socket queues must be 0 or greater")
+	}
+	if *maxTCPInfoSockets < 0 {
+		return errors.New("max tcp info sockets must be 0 or greater")
 	}
 
 	var bpfCollector *ebpfcollector.Collector
@@ -136,6 +141,7 @@ func record(args []string) error {
 	irqCollectorActive := *iface != ""
 	qdiscCollectorActive := *iface != ""
 	processCollectorActive := *pid > 0
+	tcpInfoCollectorActive := *useTCPInfo
 	ebpfFlowBudget := newEBPFFlowSampleBudget(*maxEBPFFlowSamples)
 
 	for {
@@ -180,6 +186,19 @@ func record(args []string) error {
 				fmt.Fprintf(os.Stderr, "netdiag: process schedstat unavailable; continuing without process counters: %v\n", err)
 			} else {
 				sample.Process = &process
+			}
+		}
+
+		if tcpInfoCollectorActive {
+			tcpInfo, err := c.ReadTCPInfo(*maxTCPInfoSockets)
+			if err != nil {
+				tcpInfoCollectorActive = false
+				if updateErr := updateCollectorStatus(r.Collectors, "ss_tcp_info", model.CollectorUnavailable, err.Error()); updateErr != nil {
+					return updateErr
+				}
+				fmt.Fprintf(os.Stderr, "netdiag: TCP info unavailable; continuing without TCP info: %v\n", err)
+			} else {
+				sample.TCPInfo = &tcpInfo
 			}
 		}
 
@@ -325,7 +344,7 @@ func readRecording(path string) (model.Recording, error) {
 	return r, nil
 }
 
-func buildCollectorManifest(iface string, pid int, useEBPF bool) []model.CollectorManifest {
+func buildCollectorManifest(iface string, pid int, useEBPF bool, useTCPInfo bool) []model.CollectorManifest {
 	interfaceStatus := model.CollectorDisabled
 	if iface != "" {
 		interfaceStatus = model.CollectorEnabled
@@ -345,6 +364,10 @@ func buildCollectorManifest(iface string, pid int, useEBPF bool) []model.Collect
 	ebpfStatus := model.CollectorDisabled
 	if useEBPF {
 		ebpfStatus = model.CollectorEnabled
+	}
+	tcpInfoStatus := model.CollectorDisabled
+	if useTCPInfo {
+		tcpInfoStatus = model.CollectorEnabled
 	}
 
 	return []model.CollectorManifest{
@@ -392,6 +415,11 @@ func buildCollectorManifest(iface string, pid int, useEBPF bool) []model.Collect
 			CollectorName:   "ebpf_tcp_retransmit",
 			Status:          ebpfStatus,
 			VisibilityScope: "host-wide TCP retransmission events; not scoped to an interface, process, socket, or flow",
+		},
+		{
+			CollectorName:   "ss_tcp_info",
+			Status:          tcpInfoStatus,
+			VisibilityScope: "network-namespace TCP RTT and congestion details from ss -tin; includes endpoint metadata",
 		},
 	}
 }

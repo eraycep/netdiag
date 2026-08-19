@@ -282,6 +282,17 @@ func TestRecordRejectsInvalidMaximumTCPSocketQueueCount(t *testing.T) {
 	}
 }
 
+func TestRecordRejectsInvalidMaximumTCPInfoSocketCount(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "capture.json")
+	err := record([]string{"--max-tcp-info-sockets=-1", "--ebpf=false", "--output=" + path})
+	if err == nil || !strings.Contains(err.Error(), "max tcp info sockets must be 0 or greater") {
+		t.Fatalf("error = %v, want maximum TCP info socket validation error", err)
+	}
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("output was created for invalid configuration: %v", statErr)
+	}
+}
+
 func TestEBPFFlowSampleBudget(t *testing.T) {
 	budget := newEBPFFlowSampleBudget(1)
 
@@ -381,6 +392,42 @@ func TestRecordContinuesWhenQdiscUnavailable(t *testing.T) {
 	assertCollectorStatus(t, recording.Collectors, "tc_qdisc", model.CollectorUnavailable)
 }
 
+func TestRecordContinuesWhenTCPInfoUnavailable(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	path := filepath.Join(t.TempDir(), "capture.json")
+
+	stderr := captureStderr(t, func() {
+		err := record([]string{
+			"--duration=30s",
+			"--interval=1ms",
+			"--max-samples=2",
+			"--ebpf=false",
+			"--tcp-info",
+			"--output=" + path,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	if count := strings.Count(stderr, "TCP info unavailable"); count != 1 {
+		t.Fatalf("TCP info warning count = %d, want 1; stderr: %s", count, stderr)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recording model.Recording
+	if err := json.Unmarshal(data, &recording); err != nil {
+		t.Fatal(err)
+	}
+	if len(recording.Samples) != 2 {
+		t.Fatalf("sample count = %d, want 2", len(recording.Samples))
+	}
+	assertCollectorStatus(t, recording.Collectors, "ss_tcp_info", model.CollectorUnavailable)
+}
+
 func TestCompareCommand(t *testing.T) {
 	dir := t.TempDir()
 	baselinePath := filepath.Join(dir, "baseline.json")
@@ -421,20 +468,22 @@ func TestBuildCollectorManifest(t *testing.T) {
 		iface           string
 		pid             int
 		useEBPF         bool
+		useTCPInfo      bool
 		interfaceStatus model.CollectorStatus
 		processStatus   model.CollectorStatus
 		ebpfStatus      model.CollectorStatus
+		tcpInfoStatus   model.CollectorStatus
 	}{
-		{name: "optional collectors enabled", iface: "eth0", useEBPF: true, interfaceStatus: model.CollectorEnabled, processStatus: model.CollectorDisabled, ebpfStatus: model.CollectorEnabled},
-		{name: "process collector enabled", pid: 123, interfaceStatus: model.CollectorDisabled, processStatus: model.CollectorEnabled, ebpfStatus: model.CollectorDisabled},
-		{name: "optional collectors disabled", interfaceStatus: model.CollectorDisabled, processStatus: model.CollectorDisabled, ebpfStatus: model.CollectorDisabled},
+		{name: "optional collectors enabled", iface: "eth0", useEBPF: true, useTCPInfo: true, interfaceStatus: model.CollectorEnabled, processStatus: model.CollectorDisabled, ebpfStatus: model.CollectorEnabled, tcpInfoStatus: model.CollectorEnabled},
+		{name: "process collector enabled", pid: 123, interfaceStatus: model.CollectorDisabled, processStatus: model.CollectorEnabled, ebpfStatus: model.CollectorDisabled, tcpInfoStatus: model.CollectorDisabled},
+		{name: "optional collectors disabled", interfaceStatus: model.CollectorDisabled, processStatus: model.CollectorDisabled, ebpfStatus: model.CollectorDisabled, tcpInfoStatus: model.CollectorDisabled},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manifest := buildCollectorManifest(tt.iface, tt.pid, tt.useEBPF)
-			if len(manifest) != 9 {
-				t.Fatalf("got %d collectors, want 9", len(manifest))
+			manifest := buildCollectorManifest(tt.iface, tt.pid, tt.useEBPF, tt.useTCPInfo)
+			if len(manifest) != 10 {
+				t.Fatalf("got %d collectors, want 10", len(manifest))
 			}
 			assertCollectorStatus(t, manifest, "proc_tcp", model.CollectorEnabled)
 			assertCollectorStatus(t, manifest, "proc_tcp_sockets", model.CollectorEnabled)
@@ -445,12 +494,13 @@ func TestBuildCollectorManifest(t *testing.T) {
 			assertCollectorStatus(t, manifest, "proc_interrupts", tt.interfaceStatus)
 			assertCollectorStatus(t, manifest, "tc_qdisc", tt.interfaceStatus)
 			assertCollectorStatus(t, manifest, "ebpf_tcp_retransmit", tt.ebpfStatus)
+			assertCollectorStatus(t, manifest, "ss_tcp_info", tt.tcpInfoStatus)
 		})
 	}
 }
 
 func TestUpdateCollectorStatus(t *testing.T) {
-	manifest := buildCollectorManifest("", 0, true)
+	manifest := buildCollectorManifest("", 0, true, false)
 	if err := updateCollectorStatus(manifest, "ebpf_tcp_retransmit", model.CollectorUnavailable, "permission denied"); err != nil {
 		t.Fatal(err)
 	}
@@ -467,7 +517,7 @@ func TestUpdateCollectorStatus(t *testing.T) {
 }
 
 func TestUpdateCollectorStatusRejectsUnknownCollector(t *testing.T) {
-	manifest := buildCollectorManifest("", 0, false)
+	manifest := buildCollectorManifest("", 0, false, false)
 	if err := updateCollectorStatus(manifest, "missing", model.CollectorUnavailable, "failed"); err == nil {
 		t.Fatal("expected an error")
 	}

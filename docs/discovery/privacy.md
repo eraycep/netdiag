@@ -19,6 +19,7 @@ aggregates over addresses or application data.
 | Process command lines and environment | prohibited unless separately approved |
 | IP addresses and ports | omit or pseudonymize before retention |
 | TCP socket queue tuples | local/remote IP and port, TCP state, and queued byte counts; bounded by `--max-tcp-socket-queues`; set to `0` to omit tuples while keeping aggregates |
+| TCP info socket details | local/remote IP and port, TCP state, RTT, cwnd, byte counters, and retransmission metadata; opt-in with `--tcp-info`; bounded by `--max-tcp-info-sockets`; set to `0` to omit tuples |
 | Hostnames and interface names | potentially identifying; redact for sharing |
 | Process, socket, cgroup, and namespace IDs | collect only when required; treat as sensitive metadata |
 | Kernel, driver, and counter values | permitted, subject to environment review |

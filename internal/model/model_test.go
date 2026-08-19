@@ -317,3 +317,64 @@ func TestRecordingJSONIncludesEBPFFeatures(t *testing.T) {
 		t.Fatalf("round trip mismatch: got %+v, want %+v", got.EBPFFeatures, recording.EBPFFeatures)
 	}
 }
+
+func TestSampleJSONIncludesTCPInfoStats(t *testing.T) {
+	want := Sample{
+		TCPInfo: &TCPInfoStats{
+			Count:     2,
+			Truncated: true,
+			Sockets: []TCPInfoSocket{
+				{
+					Protocol:       "tcp4",
+					LocalAddress:   "127.0.0.1",
+					LocalPort:      8080,
+					RemoteAddress:  "127.0.0.1",
+					RemotePort:     50000,
+					State:          "ESTAB",
+					RTTMillis:      0.5,
+					RTTVarMillis:   0.1,
+					CongestionWnd:  10,
+					BytesAcked:     123,
+					BytesReceived:  456,
+					Retransmission: "0/3",
+				},
+			},
+		},
+	}
+
+	data, err := json.Marshal(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{
+		"tcp_info",
+		"rtt_ms",
+		"rtt_var_ms",
+		"cwnd",
+		"bytes_acked",
+		"bytes_received",
+		"retrans",
+	} {
+		if !strings.Contains(string(data), field) {
+			t.Fatalf("serialized sample missing %q: %s", field, data)
+		}
+	}
+
+	var got Sample
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got.TCPInfo, want.TCPInfo) {
+		t.Fatalf("round trip mismatch: got %+v, want %+v", got.TCPInfo, want.TCPInfo)
+	}
+}
+
+func TestSampleJSONOmitsAbsentTCPInfoStats(t *testing.T) {
+	data, err := json.Marshal(Sample{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "tcp_info") {
+		t.Fatalf("absent TCP info was serialized: %s", data)
+	}
+}

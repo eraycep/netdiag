@@ -74,8 +74,10 @@ Current limitations:
 - CPU concentration and qdisc findings are conservative correlations, not
   causal proof.
 - Per-flow attribution now includes bounded IPv4 retransmit counters and
-  bounded TCP socket queue tuples. Connect latency, RTT, congestion state,
-  process ownership, and exact request attribution are not implemented.
+  bounded TCP socket queue tuples. RTT and basic congestion details are
+  available through opt-in `ss -tin` collection, but connect latency, process
+  ownership, deeper congestion attribution, and exact request attribution are
+  not implemented.
 - Queue-level NIC driver counters are explicitly deferred to Phase 4; Phase 1
   uses interface, IRQ, qdisc, softirq and TCP counters only.
 - Baseline-versus-incident comparison currently compares finding sets,
@@ -186,12 +188,15 @@ Implemented:
 - [x] eBPF collector-owned feature status API used by the recorder.
 - [x] Recording-wide eBPF per-flow serialization sample budget with visible
   omission reason.
+- [x] Opt-in TCP RTT and congestion details from `ss -tin`, bounded by
+  `--max-tcp-info-sockets`.
 
 Remaining:
 
 - Expand the CO-RE eBPF collector with feature detection and graceful
   degradation beyond the initial host-wide tracepoint counter.
-- Track connect latency, RTT, congestion state and per-flow socket attribution.
+- Track connect latency, deeper congestion attribution and per-flow socket
+  attribution.
 - Correlate flow events without retaining payloads.
 - Add broader capture budgets, sampling and cardinality controls for future
   eBPF event types.

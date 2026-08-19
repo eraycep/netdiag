@@ -38,6 +38,7 @@ Requirements:
 - Go
 - `make`
 - `tc` from iproute2 when collecting qdisc counters or running experiments
+- `ss` from iproute2 when enabling optional TCP info collection
 - root or suitable BPF/perf capabilities when enabling the eBPF collector
 
 Build and run tests:
@@ -92,6 +93,16 @@ Use `--max-tcp-socket-queues=0` to keep aggregate socket queue counters while
 omitting per-socket queue tuples from each sample. Socket queue tuples include
 local and remote IP addresses and ports.
 
+Collect optional TCP RTT and congestion details from `ss -tin`:
+
+```sh
+./bin/netdiag record --tcp-info --max-tcp-info-sockets=32 --duration 30s --output capture.json
+```
+
+Use `--max-tcp-info-sockets=0` to keep the collector visibility entry while
+omitting per-socket TCP info tuples. TCP info tuples include local and remote IP
+addresses and ports.
+
 Limit serialized eBPF per-flow retransmit entries:
 
 ```sh
@@ -142,12 +153,19 @@ flow details during a recording. Samples include `tcp_retransmit_flow_count`,
 `tcp_retransmit_flows_truncated` and, when a recording-wide budget omits flow
 details, `tcp_retransmit_flows_omitted_reason`.
 
+TCP info collection is opt-in because it stores endpoint metadata from
+established sockets. When enabled with `--tcp-info`, the recorder runs `ss -tin`
+once per sample and stores a bounded list sorted by highest RTT first. Samples
+include `count` and `truncated` when more established sockets were observed
+than serialized.
+
 ## Current signals
 
 | Signal | Source | Scope |
 | --- | --- | --- |
 | TCP segments, retransmits and input errors | `/proc/net/snmp` | network namespace |
 | TCP socket queue aggregates | `/proc/net/tcp`, `/proc/net/tcp6` | network namespace |
+| TCP RTT and congestion details | `ss -tin` | network namespace, opt-in, endpoint metadata, truncated by `--max-tcp-info-sockets` |
 | `NET_RX` and `NET_TX` softirq counters | `/proc/softirqs` | per CPU and host totals |
 | CPU scheduler counters | `/proc/stat` | per CPU |
 | CPU pressure | `/proc/pressure/cpu` | host, optional |
@@ -159,9 +177,9 @@ details, `tcp_retransmit_flows_omitted_reason`.
 | TCP retransmit per-flow counters | eBPF `tcp_retransmit_skb` | bounded IPv4 flow tuples, host-wide source, truncated by `--max-ebpf-flows` |
 | Host metadata | hostname, kernel release | host |
 
-The IRQ, qdisc and eBPF collectors are best-effort optional signals. If one of
-them is unavailable, `netdiag` records the failure in the collector manifest and
-continues capturing required counters. eBPF recordings also include an
+The IRQ, qdisc, TCP info and eBPF collectors are best-effort optional signals.
+If one of them is unavailable, `netdiag` records the failure in the collector
+manifest and continues capturing required counters. eBPF recordings also include an
 `ebpf_features` section so individual eBPF signals can report `enabled`,
 `disabled` or `unavailable` as the collector grows beyond the initial
 all-or-nothing retransmit tracepoint object.
@@ -179,6 +197,7 @@ Optional collectors:
 - `proc_pid_schedstat`
 - `proc_interrupts`
 - `tc_qdisc`
+- `ss_tcp_info`
 - `ebpf_tcp_retransmit`
 
 ## Current findings
@@ -392,6 +411,10 @@ The [Phase 0 discovery package](docs/discovery/README.md) contains the initial
 NGINX proxy workload, diagnostic hypotheses, controlled incident narratives,
 artifact and interview templates, privacy policy, and provisional NIC driver
 targets.
+
+The [Phase 2 status note](docs/phase2-status.md) summarizes current per-flow
+TCP and scheduler attribution evidence, remaining gaps, operator guidance and
+the next engineering direction.
 
 ## Limitations
 

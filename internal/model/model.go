@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-const FormatVersion = 14
+const FormatVersion = 15
 
 const (
 	EBPFFeatureTCPRetransmitEvents    = "tcp_retransmit_events"
@@ -38,6 +38,7 @@ type Sample struct {
 	Timestamp    time.Time       `json:"timestamp"`
 	TCP          TCPStats        `json:"tcp"`
 	TCPSockets   TCPSocketStats  `json:"tcp_sockets"`
+	TCPInfo      *TCPInfoStats   `json:"tcp_info,omitempty"`
 	SoftIRQ      SoftIRQStats    `json:"softirq"`
 	Interface    *InterfaceStats `json:"interface,omitempty"`
 	EBPF         *EBPFStats      `json:"ebpf,omitempty"`
@@ -78,6 +79,27 @@ type TCPSocketQueue struct {
 	State         string `json:"state"`
 	TXQueue       uint64 `json:"tx_queue"`
 	RXQueue       uint64 `json:"rx_queue"`
+}
+
+type TCPInfoStats struct {
+	Sockets   []TCPInfoSocket `json:"sockets,omitempty"`
+	Count     int             `json:"count,omitempty"`
+	Truncated bool            `json:"truncated,omitempty"`
+}
+
+type TCPInfoSocket struct {
+	Protocol       string  `json:"protocol"`
+	LocalAddress   string  `json:"local_address"`
+	LocalPort      uint16  `json:"local_port"`
+	RemoteAddress  string  `json:"remote_address"`
+	RemotePort     uint16  `json:"remote_port"`
+	State          string  `json:"state"`
+	RTTMillis      float64 `json:"rtt_ms,omitempty"`
+	RTTVarMillis   float64 `json:"rtt_var_ms,omitempty"`
+	CongestionWnd  uint64  `json:"cwnd,omitempty"`
+	BytesAcked     uint64  `json:"bytes_acked,omitempty"`
+	BytesReceived  uint64  `json:"bytes_received,omitempty"`
+	Retransmission string  `json:"retrans,omitempty"`
 }
 
 type IRQStats struct {
