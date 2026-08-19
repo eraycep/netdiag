@@ -43,7 +43,7 @@ traffic parameters.
 | Dimension | Initial values |
 | --- | --- |
 | Protocol | HTTP/1.1 over TCP |
-| Connection behavior | keepalive; one request per connection |
+| Connection behavior | keepalive; opt-in one request per connection for connect-latency measurement |
 | Response size | 1 KiB; 64 KiB; 1 MiB |
 | Concurrency | 1; 32; 256; saturation search |
 | Request rate | steady; burst; step increase |
@@ -51,8 +51,9 @@ traffic parameters.
 | Capture interval | 100 ms; 1 s |
 
 Record request throughput and p50, p95, p99, and p99.9 latency outside
-netdiag. Netdiag should explain a regression; it should not become the source
-of application latency measurements.
+netdiag. Use one-request-per-connection client mode when the diagnostic target
+is TCP connect latency. Netdiag should explain a regression; it should not
+become the source of application latency measurements.
 
 ## Initial failure experiments
 

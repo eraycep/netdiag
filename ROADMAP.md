@@ -193,13 +193,15 @@ Implemented:
 - [x] Conservative elevated TCP RTT finding when `--tcp-info` is enabled.
 - [x] Baseline-versus-incident highest TCP RTT key delta.
 - [x] Reproducible TCP RTT delay experiment validating `--tcp-info` analysis.
+- [x] Workload-level TCP connect latency measurement in `netdiag-workload`
+  client, including one-connection-per-request mode.
 
 Remaining:
 
 - Expand the CO-RE eBPF collector with feature detection and graceful
   degradation beyond the initial host-wide tracepoint counter.
-- Track connect latency, deeper congestion attribution and per-flow socket
-  attribution.
+- Track connect latency in `netdiag record`, deeper congestion attribution and
+  per-flow socket attribution.
 - Correlate flow events without retaining payloads.
 - Add broader capture budgets, sampling and cardinality controls for future
   eBPF event types.

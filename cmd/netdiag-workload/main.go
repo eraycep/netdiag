@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"os"
 	"sort"
 	"sync"
@@ -79,6 +80,7 @@ func runClient(args []string) error {
 	duration := fs.Duration("duration", 30*time.Second, "measurement duration")
 	concurrency := fs.Int("concurrency", 32, "concurrent workers")
 	timeout := fs.Duration("timeout", 5*time.Second, "per-request timeout")
+	newConnection := fs.Bool("new-connection", false, "disable HTTP keepalives so each request creates a new TCP connection")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -92,27 +94,46 @@ func runClient(args []string) error {
 		return errors.New("timeout must be positive")
 	}
 
-	stats := executeClient(*url, *duration, *concurrency, *timeout)
-	fmt.Printf("HTTP requests: %d succeeded, %d failed\n", stats.succeeded, stats.failed)
-	fmt.Printf(
-		"Latency milliseconds: p50=%.3f p95=%.3f p99=%.3f\n",
-		percentile(stats.latenciesMillis, 50),
-		percentile(stats.latenciesMillis, 95),
-		percentile(stats.latenciesMillis, 99),
-	)
+	stats := executeClient(*url, *duration, *concurrency, *timeout, *newConnection)
+	printClientStats(os.Stdout, stats)
 	if stats.succeeded == 0 {
 		return errors.New("no successful requests")
 	}
 	return nil
 }
 
-type clientStats struct {
-	succeeded       uint64
-	failed          uint64
-	latenciesMillis []float64
+func printClientStats(w io.Writer, stats clientStats) {
+	fmt.Fprintf(w, "HTTP requests: %d succeeded, %d failed\n", stats.succeeded, stats.failed)
+	fmt.Fprintf(
+		w,
+		"Latency milliseconds: p50=%.3f p95=%.3f p99=%.3f\n",
+		percentile(stats.latenciesMillis, 50),
+		percentile(stats.latenciesMillis, 95),
+		percentile(stats.latenciesMillis, 99),
+	)
+	fmt.Fprintf(
+		w,
+		"Connect latency milliseconds: p50=%.3f p95=%.3f p99=%.3f samples=%d\n",
+		percentile(stats.connectLatenciesMillis, 50),
+		percentile(stats.connectLatenciesMillis, 95),
+		percentile(stats.connectLatenciesMillis, 99),
+		len(stats.connectLatenciesMillis),
+	)
 }
 
-func executeClient(url string, duration time.Duration, concurrency int, timeout time.Duration) clientStats {
+type clientStats struct {
+	succeeded              uint64
+	failed                 uint64
+	latenciesMillis        []float64
+	connectLatenciesMillis []float64
+}
+
+type requestMetrics struct {
+	connectMillis float64
+	hadConnect    bool
+}
+
+func executeClient(url string, duration time.Duration, concurrency int, timeout time.Duration, newConnection bool) clientStats {
 	deadline := time.Now().Add(duration)
 	client := &http.Client{
 		Timeout: timeout,
@@ -120,6 +141,7 @@ func executeClient(url string, duration time.Duration, concurrency int, timeout 
 			Proxy:                 http.ProxyFromEnvironment,
 			DialContext:           (&net.Dialer{Timeout: timeout, KeepAlive: 30 * time.Second}).DialContext,
 			ForceAttemptHTTP2:     false,
+			DisableKeepAlives:     newConnection,
 			MaxIdleConns:          concurrency * 2,
 			MaxIdleConnsPerHost:   concurrency * 2,
 			IdleConnTimeout:       30 * time.Second,
@@ -130,6 +152,7 @@ func executeClient(url string, duration time.Duration, concurrency int, timeout 
 	var succeeded atomic.Uint64
 	var failed atomic.Uint64
 	latenciesByWorker := make([][]float64, concurrency)
+	connectLatenciesByWorker := make([][]float64, concurrency)
 	var wg sync.WaitGroup
 	for worker := 0; worker < concurrency; worker++ {
 		wg.Add(1)
@@ -137,11 +160,15 @@ func executeClient(url string, duration time.Duration, concurrency int, timeout 
 			defer wg.Done()
 			for time.Now().Before(deadline) {
 				start := time.Now()
-				if err := fetch(context.Background(), client, url); err != nil {
+				metrics, err := fetch(context.Background(), client, url)
+				if err != nil {
 					failed.Add(1)
 					continue
 				}
 				latenciesByWorker[worker] = append(latenciesByWorker[worker], float64(time.Since(start).Microseconds())/1000)
+				if metrics.hadConnect {
+					connectLatenciesByWorker[worker] = append(connectLatenciesByWorker[worker], metrics.connectMillis)
+				}
 				succeeded.Add(1)
 			}
 		}(worker)
@@ -149,32 +176,53 @@ func executeClient(url string, duration time.Duration, concurrency int, timeout 
 	wg.Wait()
 
 	var latencies []float64
+	var connectLatencies []float64
 	for _, workerLatencies := range latenciesByWorker {
 		latencies = append(latencies, workerLatencies...)
 	}
+	for _, workerConnectLatencies := range connectLatenciesByWorker {
+		connectLatencies = append(connectLatencies, workerConnectLatencies...)
+	}
 	return clientStats{
-		succeeded:       succeeded.Load(),
-		failed:          failed.Load(),
-		latenciesMillis: latencies,
+		succeeded:              succeeded.Load(),
+		failed:                 failed.Load(),
+		latenciesMillis:        latencies,
+		connectLatenciesMillis: connectLatencies,
 	}
 }
 
-func fetch(ctx context.Context, client *http.Client, url string) error {
+func fetch(ctx context.Context, client *http.Client, url string) (requestMetrics, error) {
+	var metrics requestMetrics
+	var connectStart time.Time
+	trace := &httptrace.ClientTrace{
+		ConnectStart: func(_, _ string) {
+			connectStart = time.Now()
+		},
+		ConnectDone: func(_, _ string, err error) {
+			if err != nil || connectStart.IsZero() {
+				return
+			}
+			metrics.connectMillis = float64(time.Since(connectStart).Microseconds()) / 1000
+			metrics.hadConnect = true
+		},
+	}
+	ctx = httptrace.WithClientTrace(ctx, trace)
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return err
+		return requestMetrics{}, err
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return requestMetrics{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, resp.Body)
-		return fmt.Errorf("unexpected status %s", resp.Status)
+		return requestMetrics{}, fmt.Errorf("unexpected status %s", resp.Status)
 	}
 	_, err = io.Copy(io.Discard, resp.Body)
-	return err
+	return metrics, err
 }
 
 func percentile(values []float64, percent float64) float64 {

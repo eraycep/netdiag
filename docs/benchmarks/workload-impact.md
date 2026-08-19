@@ -25,8 +25,11 @@ The primary metric is request throughput delta:
 impact = 100 * (without_recorder_rps - with_recorder_rps) / without_recorder_rps
 ```
 
-The benchmark also reports request latency p50, p95, and p99 for each run and
-the paired p99 delta.
+The workload client also prints request latency p50, p95, and p99 for each run
+and the paired benchmark reports the p99 delta. It also prints TCP connect
+latency percentiles when the client creates new TCP connections. By default the
+benchmark uses keepalive connections, so connect latency sample counts can be
+low after warmup.
 
 The Phase 1 target is less than 2% median workload impact in controlled
 experiments. Negative impact means the recorder run was faster than the paired
@@ -78,6 +81,23 @@ sudo env \
 
 Do not mix eBPF-disabled and eBPF-enabled rows in the same result table.
 
+To measure workload-level TCP connect latency more directly, run the workload
+client with one TCP connection per request:
+
+```sh
+bin/netdiag-workload client \
+  --url http://127.0.0.1:18080/payload \
+  --duration 10s \
+  --concurrency 8 \
+  --new-connection
+```
+
+The client prints:
+
+```text
+Connect latency milliseconds: p50=... p95=... p99=... samples=...
+```
+
 ## Interpretation limits
 
 - This is a local synthetic HTTP workload, not a real production incident.
@@ -88,8 +108,9 @@ Do not mix eBPF-disabled and eBPF-enabled rows in the same result table.
   claims should still be repeated on a quiet host.
 - Run on a quiet host. Background CPU or network activity can dominate a small
   percentage delta.
-- The benchmark reports client-side request latency percentiles. These are not
-  kernel-path latency measurements; they are workload-level symptoms.
+- The benchmark reports client-side request and connect latency percentiles.
+  These are not kernel-path latency measurements; they are workload-level
+  symptoms.
 
 ## Initial smoke result
 

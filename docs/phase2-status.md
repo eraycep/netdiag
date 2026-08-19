@@ -25,6 +25,8 @@ evidence and reports visibility gaps instead of claiming exact root cause.
 - Conservative receive-queue and transmit-queue findings using peak queue
   samples during the capture.
 - Conservative elevated TCP RTT finding when `--tcp-info` is enabled.
+- Workload-level TCP connect latency measurement in `netdiag-workload client`,
+  including `--new-connection` mode for one TCP connection per request.
 - Optional selected-process scheduler counters from `/proc/<pid>/schedstat`
   with conservative runqueue-wait analysis.
 - Baseline-versus-incident comparison for retransmits, socket queues, top
@@ -36,7 +38,8 @@ evidence and reports visibility gaps instead of claiming exact root cause.
 
 ## Remaining gaps
 
-- Connect latency is not tracked.
+- Connect latency is measured by the synthetic workload client, but it is not
+  collected by `netdiag record` and is not attributed to kernel-path stages.
 - TCP RTT has a conservative threshold-based analysis rule behind `--tcp-info`.
 - Congestion metadata from `ss -tin` is recorded as supporting evidence, but
   deeper congestion attribution is not implemented.
@@ -70,7 +73,7 @@ evidence and reports visibility gaps instead of claiming exact root cause.
 
 ## Suggested next engineering direction
 
-The next deeper TCP step should be connect-latency collection if connection
-establishment is the next target, or deeper congestion attribution if RTT
-classification needs more precision. Do not start both at once. Each needs its
-own analysis rules, experiments and privacy review.
+The next deeper TCP step should be recorder-level connect-latency collection if
+connection establishment is the next target, or deeper congestion attribution
+if RTT classification needs more precision. Do not start both at once. Each
+needs its own analysis rules, experiments and privacy review.

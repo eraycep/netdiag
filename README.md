@@ -71,6 +71,19 @@ Compare a baseline capture against an incident capture:
 ./bin/netdiag compare baseline.json incident.json
 ```
 
+Measure workload-level TCP connect latency with the synthetic workload client:
+
+```sh
+./bin/netdiag-workload client \
+  --url http://127.0.0.1:18080/payload \
+  --duration 10s \
+  --concurrency 8 \
+  --new-connection
+```
+
+`--new-connection` disables keepalives so each request creates a TCP
+connection. This is workload output, not `netdiag record` evidence.
+
 Disable eBPF explicitly when running unprivileged:
 
 ```sh
