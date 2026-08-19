@@ -1,6 +1,7 @@
 /bin/
 *.json
 /benchmarks/results/
+/connect-latency-*.txt
 /cpu-contention-*.txt
 /process-sched-delay-*.txt
 /qdisc-drop-*.txt

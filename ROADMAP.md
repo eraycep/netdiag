@@ -195,6 +195,7 @@ Implemented:
 - [x] Reproducible TCP RTT delay experiment validating `--tcp-info` analysis.
 - [x] Workload-level TCP connect latency measurement in `netdiag-workload`
   client, including one-connection-per-request mode.
+- [x] Reproducible workload-level TCP connect-latency experiment.
 
 Remaining:
 

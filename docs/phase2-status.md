@@ -33,8 +33,8 @@ evidence and reports visibility gaps instead of claiming exact root cause.
   socket queue tuples, highest TCP RTT, eBPF retransmit flows, eBPF feature
   errors and selected process scheduler counters.
 - Controlled experiments for packet loss, receive CPU concentration, qdisc
-  drops, TCP receive queues, TCP RTT delay and selected-process scheduler
-  delay.
+  drops, TCP receive queues, TCP RTT delay, workload-level TCP connect latency
+  and selected-process scheduler delay.
 
 ## Remaining gaps
 

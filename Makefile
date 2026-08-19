@@ -1,4 +1,4 @@
-.PHONY: build test test-integration experiment-loss experiment-cpu-contention experiment-qdisc-drop experiment-rx-queue experiment-rtt-delay experiment-process-sched-delay benchmark benchmark-ebpf benchmark-workload-impact fmt generate
+.PHONY: build test test-integration experiment-loss experiment-cpu-contention experiment-qdisc-drop experiment-rx-queue experiment-rtt-delay experiment-connect-latency experiment-process-sched-delay benchmark benchmark-ebpf benchmark-workload-impact fmt generate
 
 build:
 	go build -buildvcs=false -o bin/netdiag ./cmd/netdiag
@@ -27,6 +27,9 @@ experiment-rx-queue: build
 
 experiment-rtt-delay: build
 	sudo env NETDIAG_BIN="$(CURDIR)/bin/netdiag" bash experiments/tcp-rtt-delay.sh "$(CURDIR)"
+
+experiment-connect-latency: build
+	sudo env WORKLOAD_BIN="$(CURDIR)/bin/netdiag-workload" bash experiments/connect-latency.sh "$(CURDIR)"
 
 experiment-process-sched-delay: build
 	NETDIAG_BIN="$(CURDIR)/bin/netdiag" WORKLOAD_BIN="$(CURDIR)/bin/netdiag-workload" bash experiments/process-sched-delay.sh "$(CURDIR)"

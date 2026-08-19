@@ -414,6 +414,18 @@ validates the elevated TCP RTT finding. See
 [docs/experiments/tcp-rtt-delay.md](docs/experiments/tcp-rtt-delay.md) for
 expected RTT evidence and visibility limits.
 
+Run the workload-level TCP connect-latency experiment with:
+
+```sh
+make experiment-connect-latency
+```
+
+It runs `netdiag-workload client --new-connection` against a temporary
+namespace workload and validates that `tc netem delay` increases connect
+latency. See
+[docs/experiments/connect-latency.md](docs/experiments/connect-latency.md) for
+expected output and visibility limits.
+
 ## Capture overhead benchmark
 
 Run the unprivileged recorder benchmark with:
