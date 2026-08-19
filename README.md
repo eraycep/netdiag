@@ -206,6 +206,7 @@ The analyzer currently reports conservative counter-level findings:
 
 - elevated TCP retransmissions;
 - TCP socket queue growth;
+- elevated TCP RTT when `--tcp-info` is enabled;
 - selected-process runqueue wait growth when `--pid` is set;
 - selected-interface drops or errors;
 - cumulative counter resets during the capture;
@@ -216,6 +217,11 @@ include the top IPv4 flow tuples as supporting evidence. If the serialized flow
 list was capped by `--max-ebpf-flows`, the finding also reports the truncation.
 If an eBPF feature was disabled or unavailable, the finding reports that
 visibility gap with the recorded reason when one is available.
+
+When `--tcp-info` is enabled, TCP RTT findings report the highest observed RTT
+from `ss -tin`, the socket endpoint tuple, and cwnd/retransmission metadata
+when present. This is a conservative signal; it does not prove path congestion
+by itself.
 
 Each finding includes:
 
@@ -231,11 +237,12 @@ outbound segment denominators and percentages so raw retransmit counts are not
 misread without traffic volume, and TCP socket queue deltas show the final
 aggregate queue sizes, non-empty socket counts, and top bounded socket queue
 tuples when available. Captures recorded with `--pid` also include
-selected-process scheduler deltas. When both captures include eBPF retransmit
-flow data, the comparison also shows the top IPv4 flow tuples and whether a
-flow list was truncated by `--max-ebpf-flows`. If an eBPF feature reports
-sample-level errors in either capture, compare includes an `eBPF feature
-errors` row.
+selected-process scheduler deltas. Captures recorded with `--tcp-info` include
+the highest observed TCP RTT when either side has TCP info socket data. When
+both captures include eBPF retransmit flow data, the comparison also shows the
+top IPv4 flow tuples and whether a flow list was truncated by
+`--max-ebpf-flows`. If an eBPF feature reports sample-level errors in either
+capture, compare includes an `eBPF feature errors` row.
 
 Example:
 
@@ -247,6 +254,18 @@ Evidence: 153 retransmitted of 1101 outbound TCP segments (13.90%)
 Evidence: eBPF observed 161 tcp_retransmit_skb tracepoint events
 Evidence: Top retransmitting IPv4 flow: 127.0.0.1:43946 -> 127.0.0.1:40981 had 4 retransmits
 Next step: Check packet loss, ECN/congestion signals, peer health, and interface error counters.
+```
+
+TCP info example:
+
+```text
+Finding 1: TCP RTT was elevated during the capture
+Confidence: possible
+Severity: warning
+Evidence: highest observed TCP RTT was 123.4 ms
+Evidence: Top TCP RTT socket: tcp4 10.0.0.3:50001 -> 10.0.0.4:443 state ESTAB had 123.4 ms RTT
+Evidence: congestion window was 10 segments
+Next step: Check packet loss, congestion window, retransmissions, peer health, and whether the path is congested.
 ```
 
 When eBPF visibility is missing, evidence uses the feature-level status from
@@ -277,6 +296,7 @@ Baseline-only findings:
 
 Key delta changes:
 - TCP retransmits: 3411/15204971 outbound segments (0.02%) -> 694/1829 outbound segments (37.94%)
+- highest TCP RTT: 12.3 ms -> 123.4 ms
 - top NET_RX softirq CPU: CPU14 7.3% of 629844 -> CPU2 92.1% of 8663
 - top NET_RX CPU busy: CPU14 50.6% -> CPU2 8.0%
 - qdisc drops: 0 -> 882

@@ -24,20 +24,21 @@ evidence and reports visibility gaps instead of claiming exact root cause.
   `--tcp-info` and bounded by `--max-tcp-info-sockets`.
 - Conservative receive-queue and transmit-queue findings using peak queue
   samples during the capture.
+- Conservative elevated TCP RTT finding when `--tcp-info` is enabled.
 - Optional selected-process scheduler counters from `/proc/<pid>/schedstat`
   with conservative runqueue-wait analysis.
 - Baseline-versus-incident comparison for retransmits, socket queues, top
-  socket queue tuples, eBPF retransmit flows, eBPF feature errors and selected
-  process scheduler counters.
+  socket queue tuples, highest TCP RTT, eBPF retransmit flows, eBPF feature
+  errors and selected process scheduler counters.
 - Controlled experiments for packet loss, receive CPU concentration, qdisc
   drops, TCP receive queues and selected-process scheduler delay.
 
 ## Remaining gaps
 
 - Connect latency is not tracked.
-- RTT and basic congestion details are recording-only signals behind
-  `--tcp-info`; analysis rules are not implemented yet.
-- Deeper congestion attribution is not implemented.
+- TCP RTT has a conservative threshold-based analysis rule behind `--tcp-info`.
+- Congestion metadata from `ss -tin` is recorded as supporting evidence, but
+  deeper congestion attribution is not implemented.
 - TCP socket queue tuples do not include process ownership.
 - Socket tuples and eBPF flow tuples are not tied to individual application
   requests.
@@ -57,7 +58,8 @@ evidence and reports visibility gaps instead of claiming exact root cause.
 - Use `--max-ebpf-flow-samples` to cap how many samples serialize eBPF flow
   details during a recording.
 - Use `--tcp-info` when you need TCP RTT, cwnd, byte and retransmission metadata
-  from `ss -tin`.
+  from `ss -tin`. The analyzer can report elevated RTT and compare can show
+  highest observed TCP RTT across baseline and incident captures.
 - Use `--max-tcp-info-sockets=0` when local/remote IP:port TCP info tuples are
   too sensitive.
 - Interpret TCP socket queue tuples as network-namespace scoped evidence. They
@@ -67,7 +69,7 @@ evidence and reports visibility gaps instead of claiming exact root cause.
 
 ## Suggested next engineering direction
 
-The next deeper TCP step should be analysis for the newly recorded TCP info
-fields, or connect-latency collection if connection establishment is the next
-target. Do not start both at once. Each needs its own analysis rules,
-experiments and privacy review.
+The next deeper TCP step should be a controlled RTT/congestion experiment for
+the current TCP info rule, or connect-latency collection if connection
+establishment is the next target. Do not start both at once. Each needs its own
+analysis rules, experiments and privacy review.

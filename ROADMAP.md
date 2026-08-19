@@ -75,9 +75,9 @@ Current limitations:
   causal proof.
 - Per-flow attribution now includes bounded IPv4 retransmit counters and
   bounded TCP socket queue tuples. RTT and basic congestion details are
-  available through opt-in `ss -tin` collection, but connect latency, process
-  ownership, deeper congestion attribution, and exact request attribution are
-  not implemented.
+  available through opt-in `ss -tin` collection, including conservative RTT
+  analysis and comparison. Connect latency, process ownership, deeper
+  congestion attribution, and exact request attribution are not implemented.
 - Queue-level NIC driver counters are explicitly deferred to Phase 4; Phase 1
   uses interface, IRQ, qdisc, softirq and TCP counters only.
 - Baseline-versus-incident comparison currently compares finding sets,
@@ -190,6 +190,8 @@ Implemented:
   omission reason.
 - [x] Opt-in TCP RTT and congestion details from `ss -tin`, bounded by
   `--max-tcp-info-sockets`.
+- [x] Conservative elevated TCP RTT finding when `--tcp-info` is enabled.
+- [x] Baseline-versus-incident highest TCP RTT key delta.
 
 Remaining:
 

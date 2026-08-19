@@ -128,6 +128,37 @@ func TestCompareReportsTCPTransmitQueueSignalChanges(t *testing.T) {
 	}
 }
 
+func TestCompareReportsHighestTCPRTTSignalChange(t *testing.T) {
+	baseline := tcpInfoRTTComparisonRecording(12.3)
+	incident := tcpInfoRTTComparisonRecording(123.4)
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	want := "- highest TCP RTT: 12.3 ms -> 123.4 ms"
+	if !strings.Contains(rendered, want) {
+		t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+	}
+}
+
+func TestCompareOmitsHighestTCPRTTWhenUnavailable(t *testing.T) {
+	baseline := tcpSocketQueueComparisonRecording(0, 0, 0, 0)
+	incident := tcpSocketQueueComparisonRecording(0, 0, 0, 0)
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	if strings.Contains(rendered, "highest TCP RTT") {
+		t.Fatalf("rendered comparison unexpectedly included TCP RTT:\n%s", rendered)
+	}
+}
+
 func TestCompareReportsIncidentOnlyTopTCPSocketQueue(t *testing.T) {
 	baseline := tcpSocketTopQueueComparisonRecording(nil, false, 0)
 	incident := tcpSocketTopQueueComparisonRecording([]model.TCPSocketQueue{
@@ -504,6 +535,26 @@ func processComparisonRecording(process *model.ProcessStats) model.Recording {
 			Process:      process,
 		},
 	}}
+}
+
+func tcpInfoRTTComparisonRecording(rtts ...float64) model.Recording {
+	now := time.Now()
+	samples := []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second), TCPInfo: &model.TCPInfoStats{}},
+		{Timestamp: now.Add(time.Second), ElapsedNanos: int64(2 * time.Second), TCPInfo: &model.TCPInfoStats{}},
+	}
+	for _, rtt := range rtts {
+		samples[1].TCPInfo.Sockets = append(samples[1].TCPInfo.Sockets, model.TCPInfoSocket{
+			Protocol:      "tcp4",
+			LocalAddress:  "10.0.0.1",
+			LocalPort:     50000,
+			RemoteAddress: "10.0.0.2",
+			RemotePort:    443,
+			State:         "ESTAB",
+			RTTMillis:     rtt,
+		})
+	}
+	return model.Recording{Version: model.FormatVersion, Samples: samples}
 }
 
 func tcpSocketTopQueueComparisonRecording(topQueues []model.TCPSocketQueue, truncated bool, queueCount int) model.Recording {

@@ -29,6 +29,8 @@ aggregates over addresses or application data.
 - Minimize: collect only evidence required by a diagnostic hypothesis.
 - Bound: enforce duration, sample, cardinality, and output-size limits.
 - Disclose: record collector scope and unavailable visibility.
+- Surface: analysis and comparison output may expose derived evidence from
+  sensitive fields, such as TCP RTT with local and remote endpoint metadata.
 - Separate: keep contact/customer identity apart from technical artifacts.
 - Expire: assign a deletion date when an artifact is accepted.
 - Verify: let contributors review narratives derived from their data.

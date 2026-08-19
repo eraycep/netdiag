@@ -165,6 +165,8 @@ func compareKeyDeltas(baseline, incident model.Recording) []KeyDeltaChange {
 	incidentReceiveCPU := receiveCPUDeltaDisplay(incident)
 	retransmitFlows := retransmitFlowDeltaDisplay(baseline, incident)
 	socketQueues := tcpSocketQueueDeltaDisplay(baseline, incident)
+	baselineTCPRTT, baselineTCPRTTOK := highestTCPRTTDisplay(baseline)
+	incidentTCPRTT, incidentTCPRTTOK := highestTCPRTTDisplay(incident)
 
 	changes := []KeyDeltaChange{
 		{Name: "TCP retransmits", BaselineDisplay: tcpRetransmitDeltaDisplay(baseline), IncidentDisplay: tcpRetransmitDeltaDisplay(incident)},
@@ -181,6 +183,14 @@ func compareKeyDeltas(baseline, incident model.Recording) []KeyDeltaChange {
 		{Name: "qdisc overlimits", BaselineDisplay: uintDeltaDisplay(qdiscOverlimitsDelta(baseline)), IncidentDisplay: uintDeltaDisplay(qdiscOverlimitsDelta(incident))},
 		{Name: "interface drops", BaselineDisplay: uintDeltaDisplay(interfaceDropsDelta(baseline)), IncidentDisplay: uintDeltaDisplay(interfaceDropsDelta(incident))},
 		{Name: "interface errors", BaselineDisplay: uintDeltaDisplay(interfaceErrorsDelta(baseline)), IncidentDisplay: uintDeltaDisplay(interfaceErrorsDelta(incident))},
+	}
+
+	if baselineTCPRTTOK || incidentTCPRTTOK {
+		changes = append(changes, KeyDeltaChange{
+			Name:            "highest TCP RTT",
+			BaselineDisplay: baselineTCPRTT,
+			IncidentDisplay: incidentTCPRTT,
+		})
 	}
 
 	baselineFeatureErrors := ebpfFeatureErrorsDisplay(baseline)
@@ -576,6 +586,26 @@ func tcpTransmitQueueDisplay(r model.Recording) string {
 		return "unavailable"
 	}
 	return fmt.Sprintf("%d B, %d sockets non-zero", peak.TCPSockets.TXQueue, peak.TCPSockets.NonZeroTXSockets)
+}
+
+func highestTCPRTTDisplay(r model.Recording) (string, bool) {
+	highest := 0.0
+	found := false
+	for _, sample := range r.Samples {
+		if sample.TCPInfo == nil {
+			continue
+		}
+		for _, socket := range sample.TCPInfo.Sockets {
+			if !found || socket.RTTMillis > highest {
+				highest = socket.RTTMillis
+				found = true
+			}
+		}
+	}
+	if !found {
+		return "unavailable", false
+	}
+	return fmt.Sprintf("%.1f ms", highest), true
 }
 
 func lastProcessStats(r model.Recording) (*model.ProcessStats, bool) {
