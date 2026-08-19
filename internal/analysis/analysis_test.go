@@ -433,6 +433,110 @@ func TestAnalyzeIgnoresDecreasedTCPSocketTransmitQueue(t *testing.T) {
 	assertNoTCPSocketQueueFinding(t, r)
 }
 
+func TestAnalyzeReportsElevatedTCPInfoRTT(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{
+			Timestamp:    now,
+			ElapsedNanos: int64(time.Second),
+			TCPInfo: &model.TCPInfoStats{
+				Sockets: []model.TCPInfoSocket{
+					{
+						Protocol:       "tcp4",
+						LocalAddress:   "10.0.0.1",
+						LocalPort:      50000,
+						RemoteAddress:  "10.0.0.2",
+						RemotePort:     443,
+						State:          "ESTAB",
+						RTTMillis:      80,
+						CongestionWnd:  20,
+						Retransmission: "0/0",
+					},
+				},
+			},
+		},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			TCPInfo: &model.TCPInfoStats{
+				Sockets: []model.TCPInfoSocket{
+					{
+						Protocol:       "tcp4",
+						LocalAddress:   "10.0.0.3",
+						LocalPort:      50001,
+						RemoteAddress:  "10.0.0.4",
+						RemotePort:     443,
+						State:          "ESTAB",
+						RTTMillis:      123.4,
+						CongestionWnd:  10,
+						Retransmission: "1/3",
+					},
+				},
+			},
+		},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if findings[0].Summary != "TCP RTT was elevated during the capture" {
+		t.Fatalf("finding summary = %q", findings[0].Summary)
+	}
+	if findings[0].Severity != "warning" || findings[0].Confidence != "possible" {
+		t.Fatalf("finding severity/confidence = %s/%s", findings[0].Severity, findings[0].Confidence)
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	for _, want := range []string{
+		"highest observed TCP RTT was 123.4 ms",
+		"Top TCP RTT socket: tcp4 10.0.0.3:50001 -> 10.0.0.4:443 state ESTAB had 123.4 ms RTT",
+		"congestion window was 10 segments",
+		"ss reported retransmission metadata: 1/3",
+	} {
+		if !strings.Contains(evidence, want) {
+			t.Fatalf("missing TCP info RTT evidence %q: %s", want, evidence)
+		}
+	}
+	if findings[0].NextStep != "Check packet loss, congestion window, retransmissions, peer health, and whether the path is congested." {
+		t.Fatalf("next step = %q", findings[0].NextStep)
+	}
+}
+
+func TestAnalyzeIgnoresAbsentTCPInfoRTT(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second)},
+		{Timestamp: now.Add(time.Second), ElapsedNanos: int64(2 * time.Second)},
+	}}
+	assertNoTCPInfoRTTFinding(t, r)
+}
+
+func TestAnalyzeIgnoresLowTCPInfoRTT(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{
+			Timestamp:    now,
+			ElapsedNanos: int64(time.Second),
+			TCPInfo: &model.TCPInfoStats{
+				Sockets: []model.TCPInfoSocket{
+					{Protocol: "tcp4", LocalAddress: "10.0.0.1", LocalPort: 50000, RemoteAddress: "10.0.0.2", RemotePort: 443, State: "ESTAB", RTTMillis: 50},
+				},
+			},
+		},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			TCPInfo: &model.TCPInfoStats{
+				Sockets: []model.TCPInfoSocket{
+					{Protocol: "tcp4", LocalAddress: "10.0.0.1", LocalPort: 50000, RemoteAddress: "10.0.0.2", RemotePort: 443, State: "ESTAB", RTTMillis: 99.9},
+				},
+			},
+		},
+	}}
+	assertNoTCPInfoRTTFinding(t, r)
+}
+
 func TestAnalyzeReportsProcessRunqueueWaitGrowth(t *testing.T) {
 	r := processSchedstatRecording(
 		model.ProcessStats{PID: 123, RuntimeNanos: uint64(100 * time.Millisecond), RunqueueWaitNanos: uint64(5 * time.Millisecond), Timeslices: 10},
@@ -1003,6 +1107,19 @@ func assertNoTCPSocketQueueFinding(t *testing.T, r model.Recording) {
 		if finding.Summary == "TCP socket receive queues grew during the capture" ||
 			finding.Summary == "TCP socket transmit queues grew during the capture" {
 			t.Fatalf("unexpected TCP socket queue finding: %+v", findings)
+		}
+	}
+}
+
+func assertNoTCPInfoRTTFinding(t *testing.T, r model.Recording) {
+	t.Helper()
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range findings {
+		if finding.Summary == "TCP RTT was elevated during the capture" {
+			t.Fatalf("unexpected TCP info RTT finding: %+v", findings)
 		}
 	}
 }

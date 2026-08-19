@@ -83,6 +83,9 @@ func Analyze(r model.Recording) ([]Finding, error) {
 	if finding, ok := analyzeTCPTransmitSocketQueues(r.Samples); ok {
 		findings = append(findings, finding)
 	}
+	if finding, ok := analyzeTCPInfoRTT(r.Samples); ok {
+		findings = append(findings, finding)
+	}
 	if finding, ok := analyzeProcessSchedstat(first, last); ok {
 		findings = append(findings, finding)
 	}
@@ -207,6 +210,53 @@ func analyzeTCPTransmitSocketQueues(samples []model.Sample) (Finding, bool) {
 		Summary:    "TCP socket transmit queues grew during the capture",
 		Evidence:   evidence,
 		NextStep:   "Check whether the peer, network path, or send buffer backpressure prevented data from draining.",
+	}, true
+}
+
+func analyzeTCPInfoRTT(samples []model.Sample) (Finding, bool) {
+	var top model.TCPInfoSocket
+	found := false
+	for _, sample := range samples {
+		if sample.TCPInfo == nil {
+			continue
+		}
+		for _, socket := range sample.TCPInfo.Sockets {
+			if !found || socket.RTTMillis > top.RTTMillis {
+				top = socket
+				found = true
+			}
+		}
+	}
+	if !found || top.RTTMillis < highTCPRTTMillis {
+		return Finding{}, false
+	}
+
+	evidence := []string{
+		fmt.Sprintf("highest observed TCP RTT was %.1f ms", top.RTTMillis),
+		fmt.Sprintf(
+			"Top TCP RTT socket: %s %s:%d -> %s:%d state %s had %.1f ms RTT",
+			top.Protocol,
+			top.LocalAddress,
+			top.LocalPort,
+			top.RemoteAddress,
+			top.RemotePort,
+			top.State,
+			top.RTTMillis,
+		),
+	}
+	if top.CongestionWnd > 0 {
+		evidence = append(evidence, fmt.Sprintf("congestion window was %d segments", top.CongestionWnd))
+	}
+	if top.Retransmission != "" {
+		evidence = append(evidence, fmt.Sprintf("ss reported retransmission metadata: %s", top.Retransmission))
+	}
+
+	return Finding{
+		Severity:   "warning",
+		Confidence: "possible",
+		Summary:    "TCP RTT was elevated during the capture",
+		Evidence:   evidence,
+		NextStep:   "Check packet loss, congestion window, retransmissions, peer health, and whether the path is congested.",
 	}, true
 }
 
@@ -400,6 +450,7 @@ const (
 	minNetRXSoftIRQDelta          = uint64(1000)
 	minTCPSocketQueueGrowth       = uint64(64 * 1024)
 	minProcessRunqueueWaitGrowth  = uint64(10 * time.Millisecond)
+	highTCPRTTMillis              = 100.0
 	receiveConcentrationThreshold = 0.80
 	cpuBusyThreshold              = 0.70
 )
