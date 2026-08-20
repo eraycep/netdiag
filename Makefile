@@ -11,7 +11,7 @@ test-integration:
 	@tmp=$$(mktemp /tmp/netdiag-ebpf-integration.XXXXXX); \
 	trap 'rm -f "$$tmp"' EXIT; \
 	go test -c -o "$$tmp" ./internal/ebpfcollector; \
-	sudo env NETDIAG_ROOT_TESTS=1 "$$tmp" -test.run='^TestTCPRetransmitIntegration$$' -test.v
+	sudo env NETDIAG_ROOT_TESTS=1 "$$tmp" -test.run='^TestTCPRetransmit.*Integration$$' -test.v
 
 experiment-loss: build
 	sudo env NETDIAG_BIN="$(CURDIR)/bin/netdiag" bash experiments/tcp-loss.sh "$(CURDIR)/loss-capture.json"

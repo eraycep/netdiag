@@ -339,10 +339,10 @@ The generated files are committed so users do not need Clang to build the CLI.
 
 ## Privileged integration test
 
-The eBPF integration test loads the real `tcp_retransmit_skb` program, creates
-an isolated network namespace, applies 100% packet loss to that namespace's
-loopback device, and verifies that the BPF map count increases. It does not
-modify the host network namespace.
+The eBPF integration tests load the real `tcp_retransmit_skb` program, create
+isolated network namespaces, apply 100% packet loss to each namespace's loopback
+device, and verify that the BPF event count increases with matching IPv4 and
+IPv6 loopback flow entries. They do not modify the host network namespace.
 
 Requirements:
 
@@ -355,6 +355,12 @@ Run:
 
 ```sh
 make test-integration
+```
+
+Equivalent direct command:
+
+```sh
+sudo env NETDIAG_ROOT_TESTS=1 /usr/local/go/bin/go test -count=1 -v ./internal/ebpfcollector -run '^TestTCPRetransmit.*Integration$'
 ```
 
 Regular `make test` remains unprivileged and skips this test.
