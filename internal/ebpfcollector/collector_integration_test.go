@@ -12,11 +12,23 @@ import (
 )
 
 const (
-	rootTestsEnvironment     = "NETDIAG_ROOT_TESTS"
-	trafficHelperEnvironment = "NETDIAG_RETRANSMIT_TRAFFIC_HELPER"
+	rootTestsEnvironment       = "NETDIAG_ROOT_TESTS"
+	trafficHelperEnvironment   = "NETDIAG_RETRANSMIT_TRAFFIC_HELPER"
+	trafficProtocolEnvironment = "NETDIAG_RETRANSMIT_TRAFFIC_PROTOCOL"
+	trafficAddressEnvironment  = "NETDIAG_RETRANSMIT_TRAFFIC_ADDRESS"
 )
 
 func TestTCPRetransmitIntegration(t *testing.T) {
+	testTCPRetransmitIntegration(t, "tcp4", "127.0.0.1")
+}
+
+func TestTCPRetransmitIPv6Integration(t *testing.T) {
+	testTCPRetransmitIntegration(t, "tcp6", "::1")
+}
+
+func testTCPRetransmitIntegration(t *testing.T, protocol, address string) {
+	t.Helper()
+
 	if os.Getenv(rootTestsEnvironment) != "1" {
 		t.Skip("set NETDIAG_ROOT_TESTS=1 and run as root to enable")
 	}
@@ -42,6 +54,8 @@ func TestTCPRetransmitIntegration(t *testing.T) {
 	cmd := exec.Command(unshare, "--net", os.Args[0], "-test.run=^TestTCPRetransmitTrafficHelper$", "-test.v")
 	cmd.Env = append(os.Environ(),
 		trafficHelperEnvironment+"=1",
+		trafficProtocolEnvironment+"="+protocol,
+		trafficAddressEnvironment+"="+address,
 		"NETDIAG_IP_PATH="+ip,
 		"NETDIAG_TC_PATH="+tc,
 	)
@@ -61,9 +75,9 @@ func TestTCPRetransmitIntegration(t *testing.T) {
 	if len(after.TCPRetransmitFlows) == 0 {
 		t.Fatalf("expected at least one TCP retransmit flow, got none: %+v", after)
 	}
-	flow, ok := findLoopbackRetransmitFlow(after.TCPRetransmitFlows)
+	flow, ok := findLoopbackRetransmitFlow(after.TCPRetransmitFlows, protocol, address)
 	if !ok {
-		t.Fatalf("expected loopback retransmit flow, got %+v", after.TCPRetransmitFlows)
+		t.Fatalf("expected %s loopback retransmit flow for %s, got %+v", protocol, address, after.TCPRetransmitFlows)
 	}
 	t.Logf("observed tcp_retransmit_skb flow: %+v", flow)
 }
@@ -77,7 +91,16 @@ func TestTCPRetransmitTrafficHelper(t *testing.T) {
 
 	runCommand(t, os.Getenv("NETDIAG_IP_PATH"), "link", "set", "lo", "up")
 
-	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	protocol := os.Getenv(trafficProtocolEnvironment)
+	if protocol == "" {
+		protocol = "tcp4"
+	}
+	address := os.Getenv(trafficAddressEnvironment)
+	if address == "" {
+		address = "127.0.0.1"
+	}
+
+	listener, err := net.Listen(protocol, net.JoinHostPort(address, "0"))
 	if err != nil {
 		t.Fatalf("listen on isolated loopback: %v", err)
 	}
@@ -94,7 +117,7 @@ func TestTCPRetransmitTrafficHelper(t *testing.T) {
 		accepted <- conn
 	}()
 
-	client, err := net.DialTimeout("tcp4", listener.Addr().String(), time.Second)
+	client, err := net.DialTimeout(protocol, listener.Addr().String(), time.Second)
 	if err != nil {
 		t.Fatalf("connect over isolated loopback: %v", err)
 	}
@@ -142,10 +165,11 @@ func runCommand(t *testing.T, path string, args ...string) {
 	}
 }
 
-func findLoopbackRetransmitFlow(flows []model.TCPRetransmitFlow) (model.TCPRetransmitFlow, bool) {
+func findLoopbackRetransmitFlow(flows []model.TCPRetransmitFlow, protocol, address string) (model.TCPRetransmitFlow, bool) {
 	for _, flow := range flows {
-		if flow.SourceAddress == "127.0.0.1" &&
-			flow.DestinationAddress == "127.0.0.1" &&
+		if flow.Protocol == protocol &&
+			flow.SourceAddress == address &&
+			flow.DestinationAddress == address &&
 			flow.Retransmits > 0 {
 			return flow, true
 		}
