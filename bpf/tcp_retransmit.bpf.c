@@ -58,9 +58,7 @@ int count_tcp_retransmit(struct trace_event_raw_tcp_event_sk_skb *skb)
 	if (count)
 		__sync_fetch_and_add(count, 1);
 
-	if (bpf_probe_read_kernel(&family, sizeof(family), &skb->family) != 0)
-		return 0;
-	
+	BPF_CORE_READ_INTO(&family, skb, family);
 
 	if (family == AF_INET) {
 		count_tcp_retransmit_ipv4(skb);

@@ -2,6 +2,8 @@ package analysis
 
 import (
 	"fmt"
+	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -57,6 +59,7 @@ func Analyze(r model.Recording) ([]Finding, error) {
 			}
 			evidence = append(evidence, ebpfFeatureVisibilityEvidence(r, model.EBPFFeatureTCPRetransmitEvents)...)
 			evidence = append(evidence, ebpfFeatureVisibilityEvidence(r, model.EBPFFeatureTCPRetransmitIPv4Flows)...)
+			evidence = append(evidence, ebpfFeatureVisibilityEvidence(r, model.EBPFFeatureTCPRetransmitIPv6Flows)...)
 			findings = append(findings, Finding{
 				Severity: "warning", Confidence: "strong correlation",
 				Summary:  "TCP retransmissions were elevated during the capture",
@@ -122,11 +125,10 @@ func tcpRetransmitFlowEvidence(stats *model.EBPFStats) []string {
 	evidence := make([]string, 0, limit+2)
 	for _, flow := range stats.TCPRetransmitFlows[:limit] {
 		evidence = append(evidence, fmt.Sprintf(
-			"Top retransmitting IPv4 flow: %s:%d -> %s:%d had %d retransmits",
-			flow.SourceAddress,
-			flow.SourcePort,
-			flow.DestinationAddress,
-			flow.DestinationPort,
+			"Top retransmitting %s flow: %s -> %s had %d retransmits",
+			retransmitFlowProtocolDisplay(flow),
+			formatEndpoint(flow.SourceAddress, flow.SourcePort),
+			formatEndpoint(flow.DestinationAddress, flow.DestinationPort),
 			flow.Retransmits,
 		))
 	}
@@ -141,6 +143,21 @@ func tcpRetransmitFlowEvidence(stats *model.EBPFStats) []string {
 		evidence = append(evidence, fmt.Sprintf("eBPF flow details omitted: %s", stats.TCPRetransmitFlowsOmittedReason))
 	}
 	return evidence
+}
+
+func retransmitFlowProtocolDisplay(flow model.TCPRetransmitFlow) string {
+	switch flow.Protocol {
+	case "", "tcp4":
+		return "IPv4"
+	case "tcp6":
+		return "IPv6"
+	default:
+		return flow.Protocol
+	}
+}
+
+func formatEndpoint(address string, port uint16) string {
+	return net.JoinHostPort(address, strconv.Itoa(int(port)))
 }
 
 func ebpfFeatureErrorEvidence(stats *model.EBPFStats) []string {

@@ -187,7 +187,7 @@ than serialized.
 | IRQ counts and affinity | `/proc/interrupts`, `/proc/irq/*/smp_affinity_list`, `/sys/class/net/*/device/msi_irqs` | selected interface when discoverable |
 | Qdisc counters | `tc -s qdisc show dev <iface>` | selected interface |
 | TCP retransmit tracepoint count | eBPF `tcp_retransmit_skb` | host-wide |
-| TCP retransmit per-flow counters | eBPF `tcp_retransmit_skb` | bounded IPv4 flow tuples, host-wide source, truncated by `--max-ebpf-flows` |
+| TCP retransmit per-flow counters | eBPF `tcp_retransmit_skb` | bounded IPv4 and IPv6 flow tuples, host-wide source, truncated by `--max-ebpf-flows` |
 | Host metadata | hostname, kernel release | host |
 
 The IRQ, qdisc, TCP info and eBPF collectors are best-effort optional signals.
@@ -226,7 +226,7 @@ The analyzer currently reports conservative evidence-backed findings:
 - network receive processing concentrated on a busy CPU.
 
 When eBPF per-flow retransmission data is available, TCP retransmission findings
-include the top IPv4 flow tuples as supporting evidence. If the serialized flow
+include the top IPv4 and IPv6 flow tuples as supporting evidence. If the serialized flow
 list was capped by `--max-ebpf-flows`, the finding also reports the truncation.
 If an eBPF feature was disabled or unavailable, the finding reports that
 visibility gap with the recorded reason when one is available.
@@ -253,7 +253,7 @@ tuples when available. Captures recorded with `--pid` also include
 selected-process scheduler deltas. Captures recorded with `--tcp-info` include
 the highest observed TCP RTT when either side has TCP info socket data. When
 both captures include eBPF retransmit flow data, the comparison also shows the
-top IPv4 flow tuples and whether a flow list was truncated by
+top IPv4 and IPv6 flow tuples and whether a flow list was truncated by
 `--max-ebpf-flows`. If an eBPF feature reports sample-level errors in either
 capture, compare includes an `eBPF feature errors` row.
 
@@ -287,6 +287,7 @@ the capture:
 ```text
 Evidence: eBPF tcp_retransmit_events unavailable: permission denied
 Evidence: eBPF tcp_retransmit_ipv4_flows disabled
+Evidence: eBPF tcp_retransmit_ipv6_flows disabled
 ```
 
 Comparison example:

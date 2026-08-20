@@ -56,6 +56,7 @@ func TestEBPFStatsJSONIncludesRetransmitFlows(t *testing.T) {
 				SourcePort:         43210,
 				DestinationPort:    8080,
 				Retransmits:        3,
+				Protocol:           "tcp4",
 			},
 		},
 	}
@@ -74,6 +75,7 @@ func TestEBPFStatsJSONIncludesRetransmitFlows(t *testing.T) {
 		"source_port",
 		"destination_port",
 		"retransmits",
+		"protocol",
 	} {
 		if !strings.Contains(string(data), field) {
 			t.Fatalf("serialized eBPF stats missing %q: %s", field, data)

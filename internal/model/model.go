@@ -7,6 +7,7 @@ const FormatVersion = 15
 const (
 	EBPFFeatureTCPRetransmitEvents    = "tcp_retransmit_events"
 	EBPFFeatureTCPRetransmitIPv4Flows = "tcp_retransmit_ipv4_flows"
+	EBPFFeatureTCPRetransmitIPv6Flows = "tcp_retransmit_ipv6_flows"
 )
 
 type CollectorStatus string
@@ -219,6 +220,7 @@ type TCPRetransmitFlow struct {
 	SourcePort         uint16 `json:"source_port"`
 	DestinationPort    uint16 `json:"destination_port"`
 	Retransmits        uint64 `json:"retransmits"`
+	Protocol           string `json:"protocol,omitempty"`
 }
 
 type CollectorManifest struct {

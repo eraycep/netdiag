@@ -9,7 +9,7 @@ evidence and reports visibility gaps instead of claiming exact root cause.
 ## Implemented evidence
 
 - Host-wide eBPF `tcp_retransmit_skb` event counts.
-- Bounded IPv4 eBPF retransmit flow counters.
+- Bounded IPv4 and IPv6 eBPF retransmit flow counters.
 - Recording-level eBPF feature visibility for enabled, disabled and unavailable
   signals.
 - Per-sample eBPF feature errors when per-flow map reads degrade while
@@ -46,7 +46,7 @@ evidence and reports visibility gaps instead of claiming exact root cause.
 - TCP socket queue tuples do not include process ownership.
 - Socket tuples and eBPF flow tuples are not tied to individual application
   requests.
-- eBPF retransmit flow tuples are IPv4-only.
+- eBPF retransmit flow tuples do not include process ownership.
 - Kernel-path timing is not implemented; qdisc, driver handoff, NAPI/softirq
   and socket delivery timing remain Phase 3 work.
 - Procfs TCP socket and counter data is network-namespace scoped, while the

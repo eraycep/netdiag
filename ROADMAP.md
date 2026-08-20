@@ -73,7 +73,7 @@ Current limitations:
 - IRQ-to-interface mapping depends on sysfs metadata and driver naming.
 - CPU concentration and qdisc findings are conservative correlations, not
   causal proof.
-- Per-flow attribution now includes bounded IPv4 retransmit counters and
+- Per-flow attribution now includes bounded IPv4 and IPv6 retransmit counters and
   bounded TCP socket queue tuples. RTT and basic congestion details are
   available through opt-in `ss -tin` collection, including conservative RTT
   analysis and comparison. Connect latency, process ownership, deeper
@@ -163,7 +163,7 @@ blocking Phase 1 implementation task.
 
 Implemented:
 
-- [x] Bounded IPv4 per-flow retransmission counters from `tcp_retransmit_skb`.
+- [x] Bounded IPv4 and IPv6 per-flow retransmission counters from `tcp_retransmit_skb`.
 - [x] Root integration test verifies a controlled retransmission produces both
   a host-wide eBPF event increase and a loopback per-flow entry.
 - [x] Per-sample serialization budget for eBPF retransmit flows.

@@ -343,6 +343,31 @@ func TestCompareReportsSharedRetransmitFlowDelta(t *testing.T) {
 	}
 }
 
+func TestCompareReportsIPv6RetransmitFlowDelta(t *testing.T) {
+	baseline := comparisonFlowRecording(nil, false, 0)
+	incident := comparisonFlowRecording([]model.TCPRetransmitFlow{
+		{
+			Protocol:           "tcp6",
+			SourceAddress:      "2001:db8::1",
+			DestinationAddress: "2001:db8::2",
+			SourcePort:         53000,
+			DestinationPort:    443,
+			Retransmits:        7,
+		},
+	}, false, 1)
+
+	comparison, err := Compare(baseline, incident)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := RenderComparison("baseline.json", "incident.json", comparison)
+	want := "- top eBPF retransmit flows: none -> IPv6 [2001:db8::1]:53000 -> [2001:db8::2]:443 had 7 retransmits"
+	if !strings.Contains(rendered, want) {
+		t.Fatalf("rendered comparison missing %q:\n%s", want, rendered)
+	}
+}
+
 func TestCompareReportsRetransmitFlowTruncation(t *testing.T) {
 	baseline := comparisonFlowRecording(nil, false, 0)
 	incident := comparisonFlowRecording([]model.TCPRetransmitFlow{

@@ -282,6 +282,7 @@ func tcpSocketQueueSideDisplay(label string, stats model.TCPSocketStats, limit i
 }
 
 type retransmitFlowKey struct {
+	protocol           string
 	sourceAddress      string
 	destinationAddress string
 	sourcePort         uint16
@@ -426,6 +427,7 @@ func retransmitFlowCountByKey(flows []model.TCPRetransmitFlow) map[retransmitFlo
 
 func retransmitFlowKeyFromFlow(flow model.TCPRetransmitFlow) retransmitFlowKey {
 	return retransmitFlowKey{
+		protocol:           retransmitFlowProtocolKey(flow),
 		sourceAddress:      flow.SourceAddress,
 		destinationAddress: flow.DestinationAddress,
 		sourcePort:         flow.SourcePort,
@@ -433,7 +435,17 @@ func retransmitFlowKeyFromFlow(flow model.TCPRetransmitFlow) retransmitFlowKey {
 	}
 }
 
+func retransmitFlowProtocolKey(flow model.TCPRetransmitFlow) string {
+	if flow.Protocol == "" {
+		return "tcp4"
+	}
+	return flow.Protocol
+}
+
 func retransmitFlowKeyLess(left, right retransmitFlowKey) bool {
+	if left.protocol != right.protocol {
+		return left.protocol < right.protocol
+	}
 	if left.sourceAddress != right.sourceAddress {
 		return left.sourceAddress < right.sourceAddress
 	}
@@ -447,7 +459,15 @@ func retransmitFlowKeyLess(left, right retransmitFlowKey) bool {
 }
 
 func formatRetransmitFlowKey(key retransmitFlowKey) string {
-	return fmt.Sprintf("%s:%d -> %s:%d", key.sourceAddress, key.sourcePort, key.destinationAddress, key.destinationPort)
+	prefix := ""
+	switch key.protocol {
+	case "", "tcp4":
+	case "tcp6":
+		prefix = "IPv6 "
+	default:
+		prefix = key.protocol + " "
+	}
+	return fmt.Sprintf("%s%s -> %s", prefix, formatEndpoint(key.sourceAddress, key.sourcePort), formatEndpoint(key.destinationAddress, key.destinationPort))
 }
 
 type receiveCPUDisplay struct {

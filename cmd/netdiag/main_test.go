@@ -111,8 +111,8 @@ func TestRecordStopsAtMaximumSampleCount(t *testing.T) {
 	if recording.Samples[0].ElapsedNanos < 0 {
 		t.Fatalf("elapsed time = %d, want a nonnegative value", recording.Samples[0].ElapsedNanos)
 	}
-	if len(recording.EBPFFeatures) != 2 {
-		t.Fatalf("eBPF feature count = %d, want 2", len(recording.EBPFFeatures))
+	if len(recording.EBPFFeatures) != 3 {
+		t.Fatalf("eBPF feature count = %d, want 3", len(recording.EBPFFeatures))
 	}
 	for _, feature := range recording.EBPFFeatures {
 		if feature.Status != model.CollectorDisabled {
@@ -159,8 +159,8 @@ func TestRecordSerializesUnavailableEBPFFeatures(t *testing.T) {
 	}
 
 	assertCollectorStatus(t, recording.Collectors, "ebpf_tcp_retransmit", model.CollectorUnavailable)
-	if len(recording.EBPFFeatures) != 2 {
-		t.Fatalf("eBPF feature count = %d, want 2", len(recording.EBPFFeatures))
+	if len(recording.EBPFFeatures) != 3 {
+		t.Fatalf("eBPF feature count = %d, want 3", len(recording.EBPFFeatures))
 	}
 	for _, feature := range recording.EBPFFeatures {
 		if feature.Status != model.CollectorUnavailable {

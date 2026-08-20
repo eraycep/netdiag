@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"sort"
 
 	"github.com/cilium/ebpf/link"
@@ -26,6 +27,10 @@ var featureDefinitions = []model.EBPFFeatureStatus{
 		Name:            model.EBPFFeatureTCPRetransmitIPv4Flows,
 		VisibilityScope: "bounded IPv4 TCP retransmission flow counters",
 	},
+	{
+		Name:            model.EBPFFeatureTCPRetransmitIPv6Flows,
+		VisibilityScope: "bounded IPv6 TCP retransmission flow counters",
+	},
 }
 
 func New() (*Collector, error) {
@@ -47,30 +52,53 @@ func (c *Collector) Sample(maxFlows int) (model.EBPFStats, error) {
 	if c == nil {
 		return model.EBPFStats{}, errors.New("eBPF collector is not initialized")
 	}
+
+	if maxFlows < 0 {
+		return model.EBPFStats{}, errors.New("max flows must be non-negative")
+	}
+
 	var key uint32
 	var count uint64
 	if err := c.objects.RetransmitCount.Lookup(&key, &count); err != nil {
 		return model.EBPFStats{}, fmt.Errorf("read retransmit counter: %w", err)
 	}
-	if maxFlows < 0 {
-		return model.EBPFStats{}, errors.New("max flows must be non-negative")
-	}
 
-	flows, err := c.TCPRetransmitFlows()
+	var flows []model.TCPRetransmitFlow
+	var featureErrors []model.EBPFFeatureError
+
+	ipv4Flows, err := c.TCPRetransmitFlows()
 	if err != nil {
 		// Per-flow attribution is best-effort. Keep the host-wide eBPF signal
 		// available if the flow map cannot be read, and make the degraded
 		// per-flow feature visible in the sample.
-		return model.EBPFStats{
-			TCPRetransmitEvents: count,
-			FeatureErrors: []model.EBPFFeatureError{
-				{Name: model.EBPFFeatureTCPRetransmitIPv4Flows, Error: err.Error()},
-			},
-		}, nil
+		featureErrors = append(featureErrors, model.EBPFFeatureError{
+			Name:  model.EBPFFeatureTCPRetransmitIPv4Flows,
+			Error: err.Error(),
+		})
+	} else {
+		flows = append(flows, ipv4Flows...)
 	}
+
+	ipv6Flows, err := c.TCPRetransmitFlowsIPv6()
+	if err != nil {
+		featureErrors = append(featureErrors, model.EBPFFeatureError{
+			Name:  model.EBPFFeatureTCPRetransmitIPv6Flows,
+			Error: err.Error(),
+		})
+	} else {
+		flows = append(flows, ipv6Flows...)
+	}
+
+	sortRetransmitFlows(flows)
 	limitedFlows, flowCount, truncated := limitRetransmitFlows(flows, maxFlows)
 
-	return model.EBPFStats{TCPRetransmitEvents: count, TCPRetransmitFlows: limitedFlows, TCPRetransmitFlowsTruncated: truncated, TCPRetransmitFlowCount: flowCount}, nil
+	return model.EBPFStats{
+		TCPRetransmitEvents:         count,
+		TCPRetransmitFlows:          limitedFlows,
+		TCPRetransmitFlowsTruncated: truncated,
+		TCPRetransmitFlowCount:      flowCount,
+		FeatureErrors:               featureErrors,
+	}, nil
 }
 
 func (c *Collector) Close() error {
@@ -93,6 +121,10 @@ func ipv4String(addr uint32) string {
 	).String()
 }
 
+func ipv6String(addr [16]byte) string {
+	return netip.AddrFrom16(addr).String()
+}
+
 func retransmitFlowFromBPF(key tcpRetransmitFlowKeyIpv4, value tcpRetransmitNetdiagFlowStats) model.TCPRetransmitFlow {
 	return model.TCPRetransmitFlow{
 		SourceAddress:      ipv4String(key.Saddr),
@@ -100,6 +132,18 @@ func retransmitFlowFromBPF(key tcpRetransmitFlowKeyIpv4, value tcpRetransmitNetd
 		SourcePort:         key.Sport,
 		DestinationPort:    key.Dport,
 		Retransmits:        value.Retransmits,
+		Protocol:           "tcp4",
+	}
+}
+
+func retransmitIPv6FlowFromBPF(key tcpRetransmitFlowKeyIpv6, value tcpRetransmitNetdiagFlowStats) model.TCPRetransmitFlow {
+	return model.TCPRetransmitFlow{
+		SourceAddress:      ipv6String(key.Saddr),
+		DestinationAddress: ipv6String(key.Daddr),
+		SourcePort:         key.Sport,
+		DestinationPort:    key.Dport,
+		Retransmits:        value.Retransmits,
+		Protocol:           "tcp6",
 	}
 }
 
@@ -116,6 +160,26 @@ func (c *Collector) TCPRetransmitFlows() ([]model.TCPRetransmitFlow, error) {
 
 	if err := iter.Err(); err != nil {
 		return nil, fmt.Errorf("iterate tcp retransmit flow map: %w", err)
+	}
+
+	sortRetransmitFlows(flows)
+
+	return flows, nil
+}
+
+func (c *Collector) TCPRetransmitFlowsIPv6() ([]model.TCPRetransmitFlow, error) {
+	iter := c.objects.TcpRetransmitFlowsIpv6.Iterate()
+
+	var key tcpRetransmitFlowKeyIpv6
+	var value tcpRetransmitNetdiagFlowStats
+	var flows []model.TCPRetransmitFlow
+
+	for iter.Next(&key, &value) {
+		flows = append(flows, retransmitIPv6FlowFromBPF(key, value))
+	}
+
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("iterate tcp6 retransmit flow map: %w", err)
 	}
 
 	sortRetransmitFlows(flows)

@@ -172,6 +172,35 @@ func TestAnalyzeRetransmissionsIncludesTopEBPFFlows(t *testing.T) {
 	}
 }
 
+func TestAnalyzeRetransmissionsIncludesTopIPv6EBPFFlow(t *testing.T) {
+	now := time.Now()
+	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{
+		{Timestamp: now, ElapsedNanos: int64(time.Second), TCP: model.TCPStats{OutSegments: 1000, Retransmits: 10}, EBPF: &model.EBPFStats{TCPRetransmitEvents: 5}},
+		{
+			Timestamp:    now.Add(time.Second),
+			ElapsedNanos: int64(2 * time.Second),
+			TCP:          model.TCPStats{OutSegments: 2000, Retransmits: 40},
+			EBPF: &model.EBPFStats{
+				TCPRetransmitEvents: 35,
+				TCPRetransmitFlows: []model.TCPRetransmitFlow{
+					{Protocol: "tcp6", SourceAddress: "2001:db8::1", DestinationAddress: "2001:db8::2", SourcePort: 53000, DestinationPort: 443, Retransmits: 6},
+				},
+				TCPRetransmitFlowCount: 1,
+			},
+		},
+	}}
+
+	findings, err := Analyze(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence := strings.Join(findings[0].Evidence, " ")
+	want := "Top retransmitting IPv6 flow: [2001:db8::1]:53000 -> [2001:db8::2]:443 had 6 retransmits"
+	if !strings.Contains(evidence, want) {
+		t.Fatalf("missing IPv6 flow evidence %q: %s", want, evidence)
+	}
+}
+
 func TestAnalyzeRetransmissionsIncludesFlowTruncationEvidence(t *testing.T) {
 	now := time.Now()
 	r := model.Recording{Version: model.FormatVersion, Samples: []model.Sample{

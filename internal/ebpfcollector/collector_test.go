@@ -24,6 +24,31 @@ func TestRetransmitFlowFromBPFConvertsAddressesAndPorts(t *testing.T) {
 		SourcePort:         43210,
 		DestinationPort:    12345,
 		Retransmits:        7,
+		Protocol:           "tcp4",
+	}
+	if got != want {
+		t.Fatalf("flow = %+v, want %+v", got, want)
+	}
+}
+
+func TestRetransmitIPv6FlowFromBPFConvertsAddressesAndPorts(t *testing.T) {
+	got := retransmitIPv6FlowFromBPF(
+		tcpRetransmitFlowKeyIpv6{
+			Saddr: [16]byte{0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+			Daddr: [16]byte{0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2},
+			Sport: 53000,
+			Dport: 443,
+		},
+		tcpRetransmitNetdiagFlowStats{Retransmits: 11},
+	)
+
+	want := model.TCPRetransmitFlow{
+		SourceAddress:      "2001:db8::1",
+		DestinationAddress: "2001:db8::2",
+		SourcePort:         53000,
+		DestinationPort:    443,
+		Retransmits:        11,
+		Protocol:           "tcp6",
 	}
 	if got != want {
 		t.Fatalf("flow = %+v, want %+v", got, want)
@@ -119,8 +144,8 @@ func TestFeatureStatusHelpersReturnFreshStatuses(t *testing.T) {
 	unavailable := UnavailableFeatures("permission denied")
 	disabled := DisabledFeatures()
 
-	if len(enabled) != 2 || len(unavailable) != 2 || len(disabled) != 2 {
-		t.Fatalf("feature counts = enabled %d unavailable %d disabled %d, want all 2", len(enabled), len(unavailable), len(disabled))
+	if len(enabled) != 3 || len(unavailable) != 3 || len(disabled) != 3 {
+		t.Fatalf("feature counts = enabled %d unavailable %d disabled %d, want all 3", len(enabled), len(unavailable), len(disabled))
 	}
 
 	for _, feature := range enabled {
@@ -153,13 +178,14 @@ func TestCollectorFeaturesReturnsEnabledFeatureStatuses(t *testing.T) {
 
 	features := collector.Features()
 
-	if len(features) != 2 {
-		t.Fatalf("feature count = %d, want 2", len(features))
+	if len(features) != 3 {
+		t.Fatalf("feature count = %d, want 3", len(features))
 	}
 
 	wantNames := map[string]struct{}{
 		model.EBPFFeatureTCPRetransmitEvents:    {},
 		model.EBPFFeatureTCPRetransmitIPv4Flows: {},
+		model.EBPFFeatureTCPRetransmitIPv6Flows: {},
 	}
 	for _, feature := range features {
 		if _, ok := wantNames[feature.Name]; !ok {
