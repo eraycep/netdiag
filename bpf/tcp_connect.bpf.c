@@ -64,6 +64,7 @@ int BPF_KPROBE(tcp_v6_connect, struct sock *sk)
     return trace_connect(sk);
 }
 
+__u32 connect_latency_bucket(__u64 delta_ts);
 
 SEC("tracepoint/sock/inet_sock_set_state")
 int handle_set_state(struct trace_event_raw_inet_sock_set_state *ctx)
@@ -79,4 +80,17 @@ int handle_set_state(struct trace_event_raw_inet_sock_set_state *ctx)
     struct connect_start *start = bpf_map_lookup_elem(&tcp_connect_starts, &sk);
     if (!start)
         return 0;
+
+    __u64 delta_ts = (bpf_ktime_get_ns() - start->ts) / 1000;
+    __u32 bucket = connect_latency_buckets(delta_ts);
+    __u64 *count = bpf_map_lookup_elem(&tcp_connect_latency_buckets, &bucket);
+    if (count) {
+        __sync_fetch_and_add(count, 1);
+    }
+
+    bpf_map_delete_elem(&tcp_connect_starts, &sk);
+}
+
+__u32 connect_latency_bucket(__u64 delta_ts) {
+    return 0;
 }
